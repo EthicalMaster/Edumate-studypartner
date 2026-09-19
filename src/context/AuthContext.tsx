@@ -11,6 +11,8 @@ export interface RegisterPayload {
   password: string;
   confirm_password: string;
   full_name: string;
+  education_level?: string;
+  academic_stage?: string;
   institution?: string;
   department?: string;
   current_year?: number;

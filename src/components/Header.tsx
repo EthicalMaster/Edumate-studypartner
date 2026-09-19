@@ -179,9 +179,14 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </div>
               <div className="mt-2 flex flex-col gap-1 text-[13px] text-[#44474d]">
+                {user?.profile?.academic_stage && (
+                  <div className="px-2 py-1 rounded-lg bg-[#eff4ff]/60 text-[11px] text-[#0b1c30]">
+                    Stage: <span className="font-semibold">{user.profile.academic_stage}</span>
+                  </div>
+                )}
                 {studentDept && (
                   <div className="px-2 py-1 rounded-lg bg-[#eff4ff]/60 text-[11px] text-[#0b1c30]">
-                    Dept: <span className="font-semibold">{studentDept}</span>
+                    Dept / Stream: <span className="font-semibold">{studentDept}</span>
                   </div>
                 )}
                 {studentId && (

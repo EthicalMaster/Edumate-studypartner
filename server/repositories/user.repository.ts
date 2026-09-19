@@ -22,6 +22,8 @@ export interface StudentProfileRecord {
   id: string;
   user_id: string;
   full_name: string;
+  education_level: string | null;
+  academic_stage: string | null;
   institution: string | null;
   department: string | null;
   current_year: number | null;
@@ -40,6 +42,8 @@ export interface SafeStudentUser {
   profile: {
     id: string;
     full_name: string;
+    education_level: string | null;
+    academic_stage: string | null;
     institution: string | null;
     department: string | null;
     current_year: number | null;
@@ -70,6 +74,8 @@ export class UserRepository {
         u.updated_at as user_updated_at,
         p.id as profile_id,
         p.full_name,
+        p.education_level,
+        p.academic_stage,
         p.institution,
         p.department,
         p.current_year,
@@ -104,6 +110,8 @@ export class UserRepository {
       id: row.profile_id,
       user_id: row.user_id,
       full_name: row.full_name,
+      education_level: row.education_level || null,
+      academic_stage: row.academic_stage || null,
       institution: row.institution,
       department: row.department,
       current_year: row.current_year,
@@ -134,6 +142,8 @@ export class UserRepository {
         u.auth_provider,
         p.id as profile_id,
         p.full_name,
+        p.education_level,
+        p.academic_stage,
         p.institution,
         p.department,
         p.current_year,
@@ -160,6 +170,8 @@ export class UserRepository {
       profile: {
         id: row.profile_id,
         full_name: row.full_name,
+        education_level: row.education_level || null,
+        academic_stage: row.academic_stage || null,
         institution: row.institution,
         department: row.department,
         current_year: row.current_year,
@@ -202,24 +214,45 @@ export class UserRepository {
       );
       const newUser = userRes.rows[0];
 
+      // Resolve education level and stage, with backward compatibility for current_year
+      const educationLevel = input.education_level?.trim() || (input.current_year ? 'Undergraduate / College' : null);
+      let academicStage = input.academic_stage?.trim() || null;
+      if (!academicStage && input.current_year) {
+        const yr = input.current_year;
+        academicStage = `${yr}${yr === 1 ? 'st' : yr === 2 ? 'nd' : yr === 3 ? 'rd' : 'th'} Year`;
+      }
+
+      // Compute backward-compatible current_year (1..5) if applicable
+      let currentYear: number | null = input.current_year ?? null;
+      if (currentYear === null && academicStage) {
+        const match = academicStage.match(/^([1-5])(st|nd|rd|th)\s+Year$/i);
+        if (match && (!educationLevel || educationLevel === 'Undergraduate / College')) {
+          currentYear = parseInt(match[1], 10);
+        }
+      }
+
       // 2. Insert corresponding student profile
       const profileRes = await client.query<{
         id: string;
         full_name: string;
+        education_level: string | null;
+        academic_stage: string | null;
         institution: string | null;
         department: string | null;
         current_year: number | null;
         student_identifier: string | null;
       }>(
-        `INSERT INTO student_profiles (user_id, full_name, institution, department, current_year, student_identifier)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id, full_name, institution, department, current_year, student_identifier;`,
+        `INSERT INTO student_profiles (user_id, full_name, education_level, academic_stage, institution, department, current_year, student_identifier)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id, full_name, education_level, academic_stage, institution, department, current_year, student_identifier;`,
         [
           newUser.id,
           input.full_name.trim(),
+          educationLevel,
+          academicStage,
           input.institution ? input.institution.trim() : null,
           input.department ? input.department.trim() : null,
-          input.current_year ?? null,
+          currentYear,
           input.student_identifier ? input.student_identifier.trim() : null,
         ]
       );
@@ -237,6 +270,8 @@ export class UserRepository {
         profile: {
           id: newProfile.id,
           full_name: newProfile.full_name,
+          education_level: newProfile.education_level,
+          academic_stage: newProfile.academic_stage,
           institution: newProfile.institution,
           department: newProfile.department,
           current_year: newProfile.current_year,
@@ -273,6 +308,14 @@ export class UserRepository {
     if (data.full_name !== undefined) {
       updates.push(`full_name = $${idx++}`);
       values.push(data.full_name.trim());
+    }
+    if (data.education_level !== undefined) {
+      updates.push(`education_level = $${idx++}`);
+      values.push(data.education_level ? data.education_level.trim() : null);
+    }
+    if (data.academic_stage !== undefined) {
+      updates.push(`academic_stage = $${idx++}`);
+      values.push(data.academic_stage ? data.academic_stage.trim() : null);
     }
     if (data.institution !== undefined) {
       updates.push(`institution = $${idx++}`);

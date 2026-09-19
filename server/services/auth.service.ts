@@ -155,6 +155,8 @@ export class AuthService {
       profile: {
         id: profile.id,
         full_name: profile.full_name,
+        education_level: profile.education_level,
+        academic_stage: profile.academic_stage,
         institution: profile.institution,
         department: profile.department,
         current_year: profile.current_year,

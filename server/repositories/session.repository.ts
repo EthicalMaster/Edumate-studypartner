@@ -66,6 +66,8 @@ export class SessionRepository {
         u.auth_provider,
         p.id as profile_id,
         p.full_name,
+        p.education_level,
+        p.academic_stage,
         p.institution,
         p.department,
         p.current_year,
@@ -99,6 +101,8 @@ export class SessionRepository {
         profile: {
           id: row.profile_id,
           full_name: row.full_name,
+          education_level: row.education_level || null,
+          academic_stage: row.academic_stage || null,
           institution: row.institution,
           department: row.department,
           current_year: row.current_year,

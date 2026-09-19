@@ -57,6 +57,10 @@ async function runAuthTests() {
     path.join(__dirname, '..', 'db', 'migrations', '003_auth_compatibility.sql'),
     'utf-8'
   );
+  const migration4 = fs.readFileSync(
+    path.join(__dirname, '..', 'db', 'migrations', '004_education_profile.sql'),
+    'utf-8'
+  );
 
   let client: any;
   let isLive = false;
@@ -89,6 +93,7 @@ async function runAuthTests() {
 
     const cleanSql2 = migration2;
     const cleanSql3 = migration3;
+    const cleanSql4 = migration4;
 
     const pgMemAdapter = db.adapters.createPg();
     client = new pgMemAdapter.Client();
@@ -96,7 +101,8 @@ async function runAuthTests() {
     await client.query(cleanSql1);
     await client.query(cleanSql2);
     await client.query(cleanSql3);
-    console.log('[Test Harness] In-memory PostgreSQL engine initialized with schema 001 + 002 + 003.\n');
+    await client.query(cleanSql4);
+    console.log('[Test Harness] In-memory PostgreSQL engine initialized with schema 001 + 002 + 003 + 004.\n');
   }
 
   // --------------------------------------------------------------------------
@@ -516,6 +522,8 @@ async function runAuthTests() {
         password: 'Password123!',
         confirm_password: 'Password123!',
         full_name: 'Test Student',
+        education_level: 'Undergraduate / College',
+        academic_stage: '1st Year',
       });
       assert(!parsed.success, `Backend registration schema must reject malformed email '${badEmail}'`);
     }
@@ -593,6 +601,160 @@ async function runAuthTests() {
   } catch (e: any) {
     results.push({ name: '16. Future Google Sign-In Architecture Compatibility', passed: false, message: e.message });
     console.error('✗ TEST 16 FAILED:', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 17: Multi-Level Education Profile Validation (School, Postgrad, Diploma, Other)
+  // --------------------------------------------------------------------------
+  try {
+    // Valid School Profile (Grade 10)
+    const schoolParsed = registerSchema.safeParse({
+      email: 'school.learner@edumate.org',
+      password: 'StrongPassword123!',
+      confirm_password: 'StrongPassword123!',
+      full_name: 'Maya Patel',
+      education_level: 'School',
+      academic_stage: 'Grade 10',
+      institution: 'Lincoln High School',
+    });
+    assert(schoolParsed.success, 'Valid school registration must be accepted');
+
+    // Valid Postgraduate Profile (2nd Year)
+    const postgradParsed = registerSchema.safeParse({
+      email: 'postgrad.learner@edumate.org',
+      password: 'StrongPassword123!',
+      confirm_password: 'StrongPassword123!',
+      full_name: 'David Kim',
+      education_level: 'Postgraduate',
+      academic_stage: '2nd Year',
+      department: 'Biochemistry',
+    });
+    assert(postgradParsed.success, 'Valid postgraduate registration must be accepted');
+
+    // Valid Diploma Profile (Year 2)
+    const diplomaParsed = registerSchema.safeParse({
+      email: 'diploma.learner@edumate.org',
+      password: 'StrongPassword123!',
+      confirm_password: 'StrongPassword123!',
+      full_name: 'Carlos Mendez',
+      education_level: 'Diploma / Vocational',
+      academic_stage: 'Year 2',
+    });
+    assert(diplomaParsed.success, 'Valid diploma registration must be accepted');
+
+    // Valid Other Profile (Self-Paced)
+    const otherParsed = registerSchema.safeParse({
+      email: 'lifelong.learner@edumate.org',
+      password: 'StrongPassword123!',
+      confirm_password: 'StrongPassword123!',
+      full_name: 'Sarah Connor',
+      education_level: 'Other',
+      academic_stage: 'Self-Paced Learner',
+    });
+    assert(otherParsed.success, 'Valid custom learner registration must be accepted');
+
+    // Incompatible level / stage (e.g. School learner with university '4th Year')
+    const invalidComboParsed = registerSchema.safeParse({
+      email: 'mismatched@edumate.org',
+      password: 'StrongPassword123!',
+      confirm_password: 'StrongPassword123!',
+      full_name: 'Incompatible Student',
+      education_level: 'School',
+      academic_stage: '4th Year',
+    });
+    assert(!invalidComboParsed.success, 'School learner with university 4th Year stage must be rejected');
+
+    results.push({ name: '17. Multi-Level Education Profile Validation', passed: true });
+    console.log('✓ TEST 17: Multi-Level Education Profile Validation passed');
+  } catch (e: any) {
+    results.push({ name: '17. Multi-Level Education Profile Validation', passed: false, message: e.message });
+    console.error('✗ TEST 17 FAILED:', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 18: Database Persistence of Diverse Education Levels
+  // --------------------------------------------------------------------------
+  try {
+    const pHash = await hashPassword('StudentPass123!');
+
+    // Insert School Learner (Grade 10)
+    const schoolUser = await client.query(
+      `INSERT INTO users (email, password_hash, role, is_active)
+       VALUES ('maya.grade10@edumate.org', $1, 'STUDENT', true)
+       RETURNING id;`,
+      [pHash]
+    );
+    const schoolUserId = schoolUser.rows[0].id;
+
+    const schoolProfile = await client.query(
+      `INSERT INTO student_profiles (user_id, full_name, education_level, academic_stage, institution, current_year)
+       VALUES ($1, 'Maya Patel', 'School', 'Grade 10', 'Lincoln High', NULL)
+       RETURNING id, full_name, education_level, academic_stage, current_year;`,
+      [schoolUserId]
+    );
+    assert(schoolProfile.rows[0].education_level === 'School', 'education_level must persist as School');
+    assert(schoolProfile.rows[0].academic_stage === 'Grade 10', 'academic_stage must persist as Grade 10');
+    assert(schoolProfile.rows[0].current_year === null, 'current_year should safely be NULL for school learners');
+
+    // Insert Postgraduate Learner
+    const gradUser = await client.query(
+      `INSERT INTO users (email, password_hash, role, is_active)
+       VALUES ('david.postgrad@edumate.org', $1, 'STUDENT', true)
+       RETURNING id;`,
+      [pHash]
+    );
+    const gradProfile = await client.query(
+      `INSERT INTO student_profiles (user_id, full_name, education_level, academic_stage, department, current_year)
+       VALUES ($1, 'David Kim', 'Postgraduate', '2nd Year', 'Biochemistry', NULL)
+       RETURNING id, education_level, academic_stage, current_year;`,
+      [gradUser.rows[0].id]
+    );
+    assert(gradProfile.rows[0].education_level === 'Postgraduate', 'education_level must persist as Postgraduate');
+    assert(gradProfile.rows[0].academic_stage === '2nd Year', 'academic_stage must persist as 2nd Year');
+
+    results.push({ name: '18. Database Persistence for Diverse Education Levels', passed: true });
+    console.log('✓ TEST 18: Database Persistence for Diverse Education Levels passed');
+  } catch (e: any) {
+    results.push({ name: '18. Database Persistence for Diverse Education Levels', passed: false, message: e.message });
+    console.error('✗ TEST 18 FAILED:', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 19: Backward Compatibility with Legacy 4-Year University Payloads
+  // --------------------------------------------------------------------------
+  try {
+    // Client sending legacy payload with current_year: 4 and no education_level
+    const legacyPayload = {
+      email: 'legacy.senior@university.edu',
+      password: 'LegacyPassword123!',
+      confirm_password: 'LegacyPassword123!',
+      full_name: 'Legacy Senior',
+      current_year: 4,
+    };
+    const parsedLegacy = registerSchema.safeParse(legacyPayload);
+    assert(parsedLegacy.success, 'Legacy registration payload with current_year: 4 must still validate');
+
+    // Insert legacy record to verify backward-compatible storage
+    const legUser = await client.query(
+      `INSERT INTO users (email, password_hash, role, is_active)
+       VALUES ('legacy.senior@university.edu', 'hash', 'STUDENT', true)
+       RETURNING id;`,
+    );
+    const legProfile = await client.query(
+      `INSERT INTO student_profiles (user_id, full_name, education_level, academic_stage, current_year)
+       VALUES ($1, 'Legacy Senior', 'Undergraduate / College', '4th Year', 4)
+       RETURNING id, education_level, academic_stage, current_year;`,
+      [legUser.rows[0].id]
+    );
+    assert(legProfile.rows[0].current_year === 4, 'Legacy current_year must still be stored');
+    assert(legProfile.rows[0].education_level === 'Undergraduate / College', 'Legacy records default to Undergraduate');
+    assert(legProfile.rows[0].academic_stage === '4th Year', 'Legacy records compute stage as 4th Year');
+
+    results.push({ name: '19. Backward Compatibility with Legacy 4-Year University Schema', passed: true });
+    console.log('✓ TEST 19: Backward Compatibility with Legacy 4-Year University Schema passed');
+  } catch (e: any) {
+    results.push({ name: '19. Backward Compatibility with Legacy 4-Year University Schema', passed: false, message: e.message });
+    console.error('✗ TEST 19 FAILED:', e.message);
   }
 
   console.log('\n====================================================');

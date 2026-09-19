@@ -96,6 +96,8 @@ export interface NotificationItem {
 export interface StudentProfile {
   id: string;
   full_name: string;
+  education_level?: string | null;
+  academic_stage?: string | null;
   institution: string | null;
   department: string | null;
   current_year: number | null;

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 
 export const SettingsView: React.FC = () => {
+  const { user } = useAuth();
   const [dailyGoalTopics, setDailyGoalTopics] = useState(2);
   const [dailyGoalQuizzes, setDailyGoalQuizzes] = useState(1);
   const [algorithm, setAlgorithm] = useState('FSRS-4');
@@ -11,6 +13,12 @@ export const SettingsView: React.FC = () => {
     setSavedNotice(true);
     setTimeout(() => setSavedNotice(false), 2000);
   };
+
+  const displayName = user?.profile?.full_name || 'EDUMATE Learner';
+  const stage = user?.profile?.academic_stage || (user?.profile?.current_year ? `Year ${user.profile.current_year}` : 'Active Learner');
+  const levelOrDept = user?.profile?.department || user?.profile?.education_level || 'General';
+  const studentId = user?.profile?.student_identifier;
+  const userEmail = user?.email || 'user@edumate.internal';
 
   return (
     <div className="flex flex-col gap-6 pb-28 max-w-3xl mx-auto">
@@ -38,9 +46,11 @@ export const SettingsView: React.FC = () => {
             <span className="material-symbols-outlined text-[32px]">person</span>
           </div>
           <div>
-            <h3 className="text-[17px] font-bold text-[#0b1c30]">Vibhor Sahu</h3>
-            <p className="text-[13px] text-[#44474d]">Computer Science & Engineering • Year 3</p>
-            <p className="text-[11px] text-[#75777e] mt-0.5">Student ID: CS-2024-884 • vibhor.sahu@university.edu</p>
+            <h3 className="text-[17px] font-bold text-[#0b1c30]">{displayName}</h3>
+            <p className="text-[13px] text-[#44474d]">{levelOrDept} • {stage}</p>
+            <p className="text-[11px] text-[#75777e] mt-0.5">
+              {studentId ? `ID: ${studentId} • ` : ''}{userEmail}
+            </p>
           </div>
         </div>
         <span className="text-[11px] font-bold bg-[#eff4ff] text-[#0051d5] px-3 py-1 rounded-full">

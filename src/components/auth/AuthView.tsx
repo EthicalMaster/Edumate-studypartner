@@ -17,6 +17,62 @@ function validateClientEmail(emailStr: string): boolean {
   return PRACTICAL_EMAIL_REGEX.test(trimmed);
 }
 
+const EDUCATION_LEVEL_OPTIONS = [
+  'School',
+  'Undergraduate / College',
+  'Postgraduate',
+  'Diploma / Vocational',
+  'Other',
+] as const;
+
+type EducationLevelType = (typeof EDUCATION_LEVEL_OPTIONS)[number];
+
+const STAGES_BY_LEVEL: Record<EducationLevelType, string[]> = {
+  'School': [
+    'Grade 1',
+    'Grade 2',
+    'Grade 3',
+    'Grade 4',
+    'Grade 5',
+    'Grade 6',
+    'Grade 7',
+    'Grade 8',
+    'Grade 9',
+    'Grade 10',
+    'Grade 11',
+    'Grade 12',
+    'Other',
+  ],
+  'Undergraduate / College': [
+    '1st Year',
+    '2nd Year',
+    '3rd Year',
+    '4th Year',
+    '5th Year',
+    'Other',
+  ],
+  'Postgraduate': [
+    '1st Year',
+    '2nd Year',
+    '3rd Year',
+    'Other',
+  ],
+  'Diploma / Vocational': [
+    'Year 1',
+    'Year 2',
+    'Year 3',
+    'Year 4',
+    'Other',
+  ],
+  'Other': [
+    'Self-Paced Learner',
+    'Professional / Upskilling',
+    'Certification Candidate',
+    'Lifelong Learner',
+    'Other',
+  ],
+};
+
 export const AuthView: React.FC = () => {
   const { login, register, error, clearError, dbConnected } = useAuth();
 
@@ -29,11 +85,20 @@ export const AuthView: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [educationLevel, setEducationLevel] = useState<EducationLevelType>('Undergraduate / College');
+  const [academicStage, setAcademicStage] = useState<string>('1st Year');
+  const [customStage, setCustomStage] = useState<string>('');
   const [institution, setInstitution] = useState('');
   const [department, setDepartment] = useState('');
-  const [currentYear, setCurrentYear] = useState<number>(1);
   const [studentIdentifier, setStudentIdentifier] = useState('');
   const [localValidationErr, setLocalValidationErr] = useState<string | null>(null);
+
+  const handleEducationLevelChange = (level: EducationLevelType) => {
+    setEducationLevel(level);
+    const defaultStage = STAGES_BY_LEVEL[level][0] || 'Other';
+    setAcademicStage(defaultStage);
+    setCustomStage('');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,15 +141,26 @@ export const AuthView: React.FC = () => {
         return;
       }
 
+      const finalStage = academicStage === 'Other' && customStage.trim() ? customStage.trim() : academicStage;
+      if (!educationLevel) {
+        setLocalValidationErr('Education level is required.');
+        return;
+      }
+      if (!finalStage) {
+        setLocalValidationErr('Academic stage / grade is required.');
+        return;
+      }
+
       setSubmitting(true);
       await register({
         full_name: fullName.trim(),
         email: normalizedEmail,
         password,
         confirm_password: confirmPassword,
+        education_level: educationLevel,
+        academic_stage: finalStage,
         institution: institution.trim() || undefined,
         department: department.trim() || undefined,
-        current_year: currentYear || undefined,
         student_identifier: studentIdentifier.trim() || undefined,
       });
       setSubmitting(false);
@@ -247,11 +323,62 @@ export const AuthView: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div>
                     <label className="block text-[12px] font-medium text-[#93a7cf] mb-1.5">
+                      Education Level <span className="text-blue-400">*</span>
+                    </label>
+                    <select
+                      value={educationLevel}
+                      onChange={(e) => handleEducationLevelChange(e.target.value as EducationLevelType)}
+                      className="w-full bg-[#091124] border border-white/10 rounded-xl px-3 py-2 text-[13px] text-white focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
+                    >
+                      {EDUCATION_LEVEL_OPTIONS.map((lvl) => (
+                        <option key={lvl} value={lvl} className="bg-[#091124] text-white">
+                          {lvl}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[12px] font-medium text-[#93a7cf] mb-1.5">
+                      Academic Stage / Grade <span className="text-blue-400">*</span>
+                    </label>
+                    <select
+                      value={academicStage}
+                      onChange={(e) => setAcademicStage(e.target.value)}
+                      className="w-full bg-[#091124] border border-white/10 rounded-xl px-3 py-2 text-[13px] text-white focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
+                    >
+                      {STAGES_BY_LEVEL[educationLevel].map((stage) => (
+                        <option key={stage} value={stage} className="bg-[#091124] text-white">
+                          {stage}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {academicStage === 'Other' && (
+                  <div>
+                    <label className="block text-[12px] font-medium text-[#93a7cf] mb-1.5">
+                      Specify Stage / Program (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. PhD Candidate, High School Senior, Specialization..."
+                      value={customStage}
+                      onChange={(e) => setCustomStage(e.target.value)}
+                      className="w-full bg-[#091124] border border-white/10 rounded-xl px-3 py-2 text-[13px] text-white placeholder:text-[#55698b] focus:outline-none focus:border-blue-500 transition-all"
+                    />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[12px] font-medium text-[#93a7cf] mb-1.5">
                       Institution (Optional)
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Stanford"
+                      placeholder="e.g. School, University, Institute"
                       value={institution}
                       onChange={(e) => setInstitution(e.target.value)}
                       className="w-full bg-[#091124] border border-white/10 rounded-xl px-3 py-2 text-[13px] text-white placeholder:text-[#55698b] focus:outline-none focus:border-blue-500 transition-all"
@@ -264,7 +391,7 @@ export const AuthView: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Computer Science"
+                      placeholder="e.g. Science, Engineering, Arts"
                       value={department}
                       onChange={(e) => setDepartment(e.target.value)}
                       className="w-full bg-[#091124] border border-white/10 rounded-xl px-3 py-2 text-[13px] text-white placeholder:text-[#55698b] focus:outline-none focus:border-blue-500 transition-all"
@@ -272,36 +399,17 @@ export const AuthView: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[12px] font-medium text-[#93a7cf] mb-1.5">
-                      Academic Year
-                    </label>
-                    <select
-                      value={currentYear}
-                      onChange={(e) => setCurrentYear(Number(e.target.value))}
-                      className="w-full bg-[#091124] border border-white/10 rounded-xl px-3 py-2 text-[13px] text-white focus:outline-none focus:border-blue-500 transition-all"
-                    >
-                      <option value={1}>1st Year (Freshman)</option>
-                      <option value={2}>2nd Year (Sophomore)</option>
-                      <option value={3}>3rd Year (Junior)</option>
-                      <option value={4}>4th Year (Senior)</option>
-                      <option value={5}>5th Year (Graduate)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[12px] font-medium text-[#93a7cf] mb-1.5">
-                      Student ID (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. CS-2024-884"
-                      value={studentIdentifier}
-                      onChange={(e) => setStudentIdentifier(e.target.value)}
-                      className="w-full bg-[#091124] border border-white/10 rounded-xl px-3 py-2 text-[13px] text-white placeholder:text-[#55698b] focus:outline-none focus:border-blue-500 transition-all"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-[#93a7cf] mb-1.5">
+                    Student ID (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. STU-2026-001"
+                    value={studentIdentifier}
+                    onChange={(e) => setStudentIdentifier(e.target.value)}
+                    className="w-full bg-[#091124] border border-white/10 rounded-xl px-3 py-2 text-[13px] text-white placeholder:text-[#55698b] focus:outline-none focus:border-blue-500 transition-all"
+                  />
                 </div>
               </>
             )}
@@ -317,7 +425,7 @@ export const AuthView: React.FC = () => {
                   <span>{mode === 'login' ? 'Authenticating...' : 'Registering Account...'}</span>
                 </>
               ) : (
-                <span>{mode === 'login' ? 'Sign In' : 'Create Student Account'}</span>
+                <span>{mode === 'login' ? 'Sign In' : 'Create Account'}</span>
               )}
             </button>
           </form>

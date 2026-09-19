@@ -35,6 +35,58 @@ export function isValidEmail(email: string): boolean {
   return PRACTICAL_EMAIL_REGEX.test(trimmed);
 }
 
+export const EDUCATION_LEVELS = [
+  'School',
+  'Undergraduate / College',
+  'Postgraduate',
+  'Diploma / Vocational',
+  'Other',
+] as const;
+
+export type EducationLevel = (typeof EDUCATION_LEVELS)[number];
+
+export const VALID_STAGES_BY_LEVEL: Record<string, string[]> = {
+  'School': [
+    'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6',
+    'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12',
+    'Other'
+  ],
+  'Undergraduate / College': [
+    '1st Year', '2nd Year', '3rd Year', '4th Year', '5th Year', 'Other'
+  ],
+  'Postgraduate': [
+    '1st Year', '2nd Year', '3rd Year', 'Other'
+  ],
+  'Diploma / Vocational': [
+    'Year 1', 'Year 2', 'Year 3', 'Year 4', 'Other'
+  ],
+  'Other': [
+    'Self-Paced Learner', 'Professional / Upskilling', 'Certification Candidate', 'Lifelong Learner', 'Other'
+  ],
+};
+
+export function isValidStageForLevel(level: string, stage: string): boolean {
+  if (!level || !stage) return false;
+  const allowed = VALID_STAGES_BY_LEVEL[level];
+  if (allowed && allowed.includes(stage)) {
+    return true;
+  }
+  // If custom stage, check incompatible patterns
+  if (level === 'School') {
+    if (/^[1-5](st|nd|rd|th)\s+Year$/i.test(stage)) {
+      return false;
+    }
+    return true;
+  }
+  if (level === 'Undergraduate / College') {
+    if (/^Grade\s+\d+$/i.test(stage)) {
+      return false;
+    }
+    return true;
+  }
+  return true;
+}
+
 export const registerSchema = z
   .object({
     email: z
@@ -58,6 +110,16 @@ export const registerSchema = z
       .trim()
       .min(2, { message: 'Full name must be at least 2 characters long' })
       .max(150, { message: 'Full name must not exceed 150 characters' }),
+    education_level: z
+      .string()
+      .trim()
+      .max(60)
+      .optional(),
+    academic_stage: z
+      .string()
+      .trim()
+      .max(60)
+      .optional(),
     institution: z
       .string()
       .trim()
@@ -88,7 +150,38 @@ export const registerSchema = z
   .refine((data) => data.password === data.confirm_password, {
     message: 'Passwords do not match',
     path: ['confirm_password'],
-  });
+  })
+  .refine(
+    (data) => Boolean((data.education_level && data.education_level.length > 0) || data.current_year),
+    {
+      message: 'Education level is required',
+      path: ['education_level'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.education_level && data.education_level.length > 0) {
+        return Boolean(data.academic_stage && data.academic_stage.length > 0);
+      }
+      return true;
+    },
+    {
+      message: 'Academic stage / grade is required',
+      path: ['academic_stage'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.education_level && data.academic_stage) {
+        return isValidStageForLevel(data.education_level, data.academic_stage);
+      }
+      return true;
+    },
+    {
+      message: 'The selected academic stage is not valid for the chosen education level',
+      path: ['academic_stage'],
+    }
+  );
 
 export const loginSchema = z.object({
   email: z
@@ -111,6 +204,18 @@ export const updateProfileSchema = z.object({
     .min(2, { message: 'Full name must be at least 2 characters long' })
     .max(150, { message: 'Full name must not exceed 150 characters' })
     .optional(),
+  education_level: z
+    .string()
+    .trim()
+    .max(60)
+    .optional()
+    .nullable(),
+  academic_stage: z
+    .string()
+    .trim()
+    .max(60)
+    .optional()
+    .nullable(),
   institution: z
     .string()
     .trim()
