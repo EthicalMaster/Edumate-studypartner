@@ -191,7 +191,7 @@ export const Header: React.FC<HeaderProps> = ({
                 )}
                 {studentId && (
                   <div className="px-2 py-1 rounded-lg bg-[#eff4ff]/60 text-[11px] text-[#0b1c30]">
-                    ID: <span className="font-semibold">{studentId}</span>
+                    Learner ID: <span className="font-mono font-semibold text-[#0051d5]">{studentId}</span>
                   </div>
                 )}
                 {user?.profile?.institution && (

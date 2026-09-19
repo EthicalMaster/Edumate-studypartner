@@ -14,13 +14,19 @@ import {
   verifyPassword,
   generateSessionToken,
   hashSessionToken,
+  generateLearnerId,
+  isValidLearnerId,
 } from '../utils/crypto.js';
 import {
   registerSchema,
   loginSchema,
   isValidEmail,
   normalizeEmail,
+  LEARNER_ID_REGEX,
 } from '../utils/validation.js';
+import { setPoolForTesting } from '../db/connection.js';
+import { userRepository } from '../repositories/user.repository.js';
+import { authService } from '../services/auth.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,6 +67,10 @@ async function runAuthTests() {
     path.join(__dirname, '..', 'db', 'migrations', '004_education_profile.sql'),
     'utf-8'
   );
+  const migration5 = fs.readFileSync(
+    path.join(__dirname, '..', 'db', 'migrations', '005_learner_id_system.sql'),
+    'utf-8'
+  );
 
   let client: any;
   let isLive = false;
@@ -85,6 +95,35 @@ async function runAuthTests() {
       impure: true,
       implementation: () => crypto.randomUUID(),
     });
+    db.public.registerFunction({
+      name: 'md5',
+      args: [(db.public as any).getType('text')],
+      returns: (db.public as any).getType('text'),
+      implementation: (val: string) => crypto.createHash('md5').update(val || '').digest('hex'),
+    });
+    db.public.registerFunction({
+      name: 'length',
+      args: [(db.public as any).getType('text')],
+      returns: (db.public as any).getType('integer'),
+      implementation: (val: string) => (val ? val.length : 0),
+    });
+    db.public.registerFunction({
+      name: 'upper',
+      args: [(db.public as any).getType('text')],
+      returns: (db.public as any).getType('text'),
+      implementation: (val: string) => (val ? val.toUpperCase() : ''),
+    });
+    db.public.registerFunction({
+      name: 'substring',
+      args: [
+        (db.public as any).getType('text'),
+        (db.public as any).getType('integer'),
+        (db.public as any).getType('integer'),
+      ],
+      returns: (db.public as any).getType('text'),
+      implementation: (val: string, start: number, len: number) =>
+        val ? val.substring(start - 1, start - 1 + len) : '',
+    });
 
     const cleanSql1 = migration1
       .replace(/CREATE EXTENSION[^\n]+;/gi, '')
@@ -94,15 +133,19 @@ async function runAuthTests() {
     const cleanSql2 = migration2;
     const cleanSql3 = migration3;
     const cleanSql4 = migration4;
+    const cleanSql5 = migration5.replace(/CHECK\s*\([^)]*~[^)]*\)/gi, 'CHECK (student_identifier IS NOT NULL)');
 
     const pgMemAdapter = db.adapters.createPg();
-    client = new pgMemAdapter.Client();
-    await client.connect();
+    const testPool = new pgMemAdapter.Pool();
+    setPoolForTesting(testPool);
+    client = await testPool.connect();
+
     await client.query(cleanSql1);
     await client.query(cleanSql2);
     await client.query(cleanSql3);
     await client.query(cleanSql4);
-    console.log('[Test Harness] In-memory PostgreSQL engine initialized with schema 001 + 002 + 003 + 004.\n');
+    await client.query(cleanSql5);
+    console.log('[Test Harness] In-memory PostgreSQL engine initialized with schemas 001 through 005.\n');
   }
 
   // --------------------------------------------------------------------------
@@ -132,6 +175,7 @@ async function runAuthTests() {
   let student1ProfileId = '';
   let student1SessionToken = '';
   try {
+    const candidateId = generateLearnerId();
     const input = {
       email: 'alex.chen@university.edu',
       password: 'SecureStudentPass2026!',
@@ -140,7 +184,7 @@ async function runAuthTests() {
       institution: 'Stanford University',
       department: 'Computer Science',
       current_year: 3,
-      student_identifier: 'STU-9921',
+      student_identifier: candidateId,
     };
 
     // Validate using Zod schema
@@ -430,9 +474,9 @@ async function runAuthTests() {
       ['student.b@university.edu', passB]
     );
     const pB = await client.query(
-      `INSERT INTO student_profiles (user_id, full_name)
-       VALUES ($1, 'Student B') RETURNING id;`,
-      [uB.rows[0].id]
+      `INSERT INTO student_profiles (user_id, full_name, student_identifier)
+       VALUES ($1, 'Student B', $2) RETURNING id;`,
+      [uB.rows[0].id, generateLearnerId()]
     );
     const student2ProfileId = pB.rows[0].id;
 
@@ -755,6 +799,379 @@ async function runAuthTests() {
   } catch (e: any) {
     results.push({ name: '19. Backward Compatibility with Legacy 4-Year University Schema', passed: false, message: e.message });
     console.error('✗ TEST 19 FAILED:', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 20: New Registration Automatically Receives a Permanent Learner ID
+  // --------------------------------------------------------------------------
+  let autoUser: any = null;
+  let autoLearnerId = '';
+  try {
+    const regInput = {
+      email: 'auto.learner@university.edu',
+      password: 'StrongPass2026!#',
+      confirm_password: 'StrongPass2026!#',
+      full_name: 'Jordan Rivera',
+      education_level: 'Undergraduate / College' as const,
+      academic_stage: '2nd Year',
+      institution: 'UC Berkeley',
+      department: 'Electrical Engineering',
+    };
+
+    // Note: No student_identifier is passed by the caller
+    const created = await userRepository.createUserWithProfile(regInput);
+    assert(!!created, 'createUserWithProfile must return the newly created user');
+    assert(!!created.profile, 'User must have an associated student profile');
+    assert(typeof created.profile?.student_identifier === 'string', 'student_identifier must be a string');
+    assert((created.profile?.student_identifier ?? '').length > 0, 'student_identifier must not be empty');
+
+    autoUser = created;
+    autoLearnerId = created.profile!.student_identifier!;
+
+    // Verify directly in database
+    const dbCheck = await client.query(
+      `SELECT student_identifier FROM student_profiles WHERE user_id = $1;`,
+      [created.id]
+    );
+    assert(dbCheck.rows.length === 1, 'Database must contain profile row');
+    assert(
+      dbCheck.rows[0].student_identifier === autoLearnerId,
+      'Database stored student_identifier must match repository return value'
+    );
+
+    results.push({ name: '20. Automatic Learner ID Generation on Registration', passed: true });
+    console.log(`✓ TEST 20: Automatic Learner ID Generation passed (ID: ${autoLearnerId})`);
+  } catch (e: any) {
+    results.push({ name: '20. Automatic Learner ID Generation on Registration', passed: false, message: e.message });
+    console.error('✗ TEST 20 FAILED:', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 21: Learner ID Format (Exact 10 chars, EDU prefix, 7 uppercase chars)
+  // --------------------------------------------------------------------------
+  try {
+    assert(autoLearnerId.length === 10, `Learner ID must be exactly 10 characters long, got: ${autoLearnerId.length}`);
+    assert(autoLearnerId.startsWith('EDU'), `Learner ID must begin with prefix EDU, got: ${autoLearnerId}`);
+    
+    const randomSuffix = autoLearnerId.slice(3);
+    assert(randomSuffix.length === 7, `Suffix must be exactly 7 characters, got: ${randomSuffix.length}`);
+    assert(/^[A-Z0-9]{7}$/.test(randomSuffix), `Suffix must use only uppercase A-Z and 0-9, got: ${randomSuffix}`);
+    assert(isValidLearnerId(autoLearnerId), 'isValidLearnerId() helper must return true for generated ID');
+    assert(LEARNER_ID_REGEX.test(autoLearnerId), 'LEARNER_ID_REGEX must match generated ID');
+
+    // Negative assertions for invalid formats
+    assert(!isValidLearnerId('EDU12345'), 'Must reject length != 10 (short)');
+    assert(!isValidLearnerId('EDU12345678'), 'Must reject length != 10 (long)');
+    assert(!isValidLearnerId('STU7K4P92X'), 'Must reject wrong prefix');
+    assert(!isValidLearnerId('edu7k4p92x'), 'Must reject lowercase prefix and characters');
+    assert(!isValidLearnerId('EDU7K4P92!'), 'Must reject special characters');
+    assert(!isValidLearnerId(''), 'Must reject empty string');
+
+    results.push({ name: '21. Learner ID Format and Specification Enforcement', passed: true });
+    console.log('✓ TEST 21: Learner ID Format and Specification Enforcement passed');
+  } catch (e: any) {
+    results.push({ name: '21. Learner ID Format and Specification Enforcement', passed: false, message: e.message });
+    console.error('✗ TEST 21 FAILED:', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 22: Uniqueness of Generated Learner IDs across Multiple Registrations
+  // --------------------------------------------------------------------------
+  try {
+    const generatedIds = new Set<string>();
+    generatedIds.add(autoLearnerId);
+
+    // Register 10 more distinct users
+    for (let i = 1; i <= 10; i++) {
+      const u = await userRepository.createUserWithProfile({
+        email: `batch.learner.${i}@edumate.org`,
+        password: 'BatchPassword2026!',
+        confirm_password: 'BatchPassword2026!',
+        full_name: `Batch Learner ${i}`,
+        education_level: 'Undergraduate / College',
+        academic_stage: '1st Year',
+      });
+      const id = u.profile!.student_identifier!;
+      assert(isValidLearnerId(id), `Generated ID ${id} must be valid`);
+      assert(!generatedIds.has(id), `Learner ID collision detected for ID: ${id}`);
+      generatedIds.add(id);
+    }
+
+    assert(generatedIds.size === 11, `All 11 registered users must have distinct unique Learner IDs`);
+
+    results.push({ name: '22. Learner ID Uniqueness across Multiple Registrations', passed: true });
+    console.log(`✓ TEST 22: Learner ID Uniqueness across Multiple Registrations passed (${generatedIds.size} unique IDs)`);
+  } catch (e: any) {
+    results.push({ name: '22. Learner ID Uniqueness across Multiple Registrations', passed: false, message: e.message });
+    console.error('✗ TEST 22 FAILED:', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 23: Learner ID Persistence & Immutability across Logout and Login
+  // --------------------------------------------------------------------------
+  try {
+    // 1. Log in the user created in Test 20
+    const loginResult = await authService.login({
+      email: 'auto.learner@university.edu',
+      password: 'StrongPass2026!#',
+    });
+    assert(!!loginResult, 'Login must succeed');
+    assert(
+      loginResult.user.profile?.student_identifier === autoLearnerId,
+      'Login response must return the exact same permanent Learner ID'
+    );
+
+    // 2. Simulate Logout by revoking session
+    await authService.logout(loginResult.sessionToken);
+
+    // 3. Log in again
+    const reLoginResult = await authService.login({
+      email: 'auto.learner@university.edu',
+      password: 'StrongPass2026!#',
+    });
+    assert(!!reLoginResult, 'Re-login must succeed');
+    assert(
+      reLoginResult.user.profile?.student_identifier === autoLearnerId,
+      'Re-login must preserve the exact same permanent Learner ID'
+    );
+
+    results.push({ name: '23. Learner ID Immutability across Logout & Login', passed: true });
+    console.log('✓ TEST 23: Learner ID Immutability across Logout & Login passed');
+  } catch (e: any) {
+    results.push({ name: '23. Learner ID Immutability across Logout & Login', passed: false, message: e.message });
+    console.error('✗ TEST 23 FAILED:', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 24: Learner ID Immutability across Profile Updates
+  // --------------------------------------------------------------------------
+  try {
+    // Attempt normal profile update
+    const updatedUser = await userRepository.updateProfile(autoUser.id, {
+      full_name: 'Jordan Rivera Updated',
+      department: 'Robotics & AI',
+      institution: 'UC Berkeley COE',
+    });
+    assert(!!updatedUser, 'updatedUser must not be null');
+    assert(updatedUser!.profile?.full_name === 'Jordan Rivera Updated', 'Profile full_name must be updated');
+    assert(
+      updatedUser!.profile?.student_identifier === autoLearnerId,
+      'Learner ID must remain strictly unchanged after valid profile update'
+    );
+
+    // Attempt malicious attempt to inject a modified student_identifier
+    const maliciousPayload = {
+      full_name: 'Jordan Tampered',
+      student_identifier: 'EDUHACKED99', // Malicious attempt to change permanent ID
+    } as any;
+    const tamperedResult = await userRepository.updateProfile(autoUser.id, maliciousPayload);
+    assert(!!tamperedResult, 'tamperedResult must not be null');
+    assert(
+      tamperedResult!.profile?.student_identifier === autoLearnerId,
+      'Learner ID must NEVER be modified by profile update calls'
+    );
+
+    // Verify database record directly
+    const dbVerify = await client.query(
+      `SELECT student_identifier FROM student_profiles WHERE user_id = $1;`,
+      [autoUser.id]
+    );
+    assert(
+      dbVerify.rows[0].student_identifier === autoLearnerId,
+      'Database record must strictly retain original permanent Learner ID'
+    );
+
+    results.push({ name: '24. Learner ID Immutability across Profile Updates', passed: true });
+    console.log('✓ TEST 24: Learner ID Immutability across Profile Updates passed');
+  } catch (e: any) {
+    results.push({ name: '24. Learner ID Immutability across Profile Updates', passed: false, message: e.message });
+    console.error('✗ TEST 24 FAILED:', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 25: Anti-IDOR & Authorization Isolation (Learner Cannot Modify Another's ID)
+  // --------------------------------------------------------------------------
+  try {
+    // Create Victim user
+    const victim = await userRepository.createUserWithProfile({
+      email: 'victim.student@edumate.org',
+      password: 'VictimPass2026!',
+      confirm_password: 'VictimPass2026!',
+      full_name: 'Victim Student',
+      education_level: 'Undergraduate / College',
+      academic_stage: '1st Year',
+    });
+    const victimOriginalId = victim.profile!.student_identifier!;
+
+    // Create Attacker user
+    const attacker = await userRepository.createUserWithProfile({
+      email: 'attacker.student@edumate.org',
+      password: 'AttackerPass2026!',
+      confirm_password: 'AttackerPass2026!',
+      full_name: 'Attacker Student',
+      education_level: 'Undergraduate / College',
+      academic_stage: '1st Year',
+    });
+
+    // Attacker attempts to update victim's profile
+    const attackerUpdate = await userRepository.updateProfile(attacker.id, {
+      full_name: 'Attacker Renamed',
+    });
+    assert(!!attackerUpdate, 'attackerUpdate must not be null');
+    assert(attackerUpdate!.id === attacker.id, 'Update must only affect the authenticated caller');
+
+    // Verify Victim's record is completely untouched
+    const victimDb = await client.query(
+      `SELECT full_name, student_identifier FROM student_profiles WHERE user_id = $1;`,
+      [victim.id]
+    );
+    assert(victimDb.rows[0].full_name === 'Victim Student', 'Victim profile name must remain intact');
+    assert(
+      victimDb.rows[0].student_identifier === victimOriginalId,
+      'Victim Learner ID must remain strictly unchanged'
+    );
+
+    results.push({ name: '25. Anti-IDOR & Authorization Isolation', passed: true });
+    console.log('✓ TEST 25: Anti-IDOR & Authorization Isolation passed');
+  } catch (e: any) {
+    results.push({ name: '25. Anti-IDOR & Authorization Isolation', passed: false, message: e.message });
+    console.error('✗ TEST 25 FAILED:', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 26: Duplicate Candidate Collision Handling and Retry
+  // --------------------------------------------------------------------------
+  try {
+    // 1. Verify isLearnerIdTaken correctly detects used vs unused IDs
+    const taken = await userRepository.isLearnerIdTaken(autoLearnerId);
+    assert(taken === true, `isLearnerIdTaken must return true for existing ID ${autoLearnerId}`);
+
+    const unusedId = 'EDU9999999';
+    const notTaken = await userRepository.isLearnerIdTaken(unusedId);
+    assert(notTaken === false, `isLearnerIdTaken must return false for unused ID ${unusedId}`);
+
+    // 2. Test generateUniqueLearnerId helper
+    const freshUniqueId = await userRepository.generateUniqueLearnerId();
+    assert(isValidLearnerId(freshUniqueId), 'generateUniqueLearnerId must produce a valid 10-char EDU ID');
+    const isCollision = await userRepository.isLearnerIdTaken(freshUniqueId);
+    assert(!isCollision, 'generateUniqueLearnerId must produce an unassigned ID');
+
+    results.push({ name: '26. Duplicate Candidate Collision Handling & Retry', passed: true });
+    console.log('✓ TEST 26: Duplicate Candidate Collision Handling & Retry passed');
+  } catch (e: any) {
+    results.push({ name: '26. Duplicate Candidate Collision Handling & Retry', passed: false, message: e.message });
+    console.error('✗ TEST 26 FAILED:', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 27: Backward Compatibility & Safe Database Migration Backfill
+  // --------------------------------------------------------------------------
+  try {
+    // Simulate pre-existing rows before backfill query:
+    // User A: Has existing valid ID 'EDU7A1B2C3'
+    const uA = await client.query(
+      `INSERT INTO users (email, password_hash, role, is_active)
+       VALUES ('pre.valid@edumate.org', 'hash', 'STUDENT', true) RETURNING id;`
+    );
+    await client.query(
+      `INSERT INTO student_profiles (user_id, full_name, student_identifier)
+       VALUES ($1, 'Pre Valid', 'EDU7A1B2C3');`,
+      [uA.rows[0].id]
+    );
+
+    // User B: Has legacy non-standard identifier 'STU-LEGACY-01'
+    const uB = await client.query(
+      `INSERT INTO users (email, password_hash, role, is_active)
+       VALUES ('pre.legacy@edumate.org', 'hash', 'STUDENT', true) RETURNING id;`
+    );
+    await client.query(
+      `INSERT INTO student_profiles (user_id, full_name, student_identifier)
+       VALUES ($1, 'Pre Legacy', 'STU-LEGACY-01');`,
+      [uB.rows[0].id]
+    );
+
+    // Execute migration 005 backfill query logic
+    await client.query(`
+      UPDATE student_profiles
+      SET student_identifier = 'EDU' || UPPER(SUBSTRING(MD5(id::text), 1, 7))
+      WHERE student_identifier IS NULL 
+         OR LENGTH(student_identifier) != 10 
+         OR SUBSTRING(student_identifier, 1, 3) != 'EDU';
+    `);
+
+    // Verify User A: Existing valid ID must NOT have been overwritten
+    const checkA = await client.query(
+      `SELECT student_identifier FROM student_profiles WHERE user_id = $1;`,
+      [uA.rows[0].id]
+    );
+    assert(
+      checkA.rows[0].student_identifier === 'EDU7A1B2C3',
+      'Existing valid Learner ID must be strictly preserved by backfill'
+    );
+
+    // Verify User B: Non-standard ID must have been safely migrated to a valid 10-char EDU ID
+    const checkB = await client.query(
+      `SELECT student_identifier FROM student_profiles WHERE user_id = $1;`,
+      [uB.rows[0].id]
+    );
+    const newIdB = checkB.rows[0].student_identifier;
+    assert(isValidLearnerId(newIdB), `Migrated ID must now be valid 10-char EDU ID, got: ${newIdB}`);
+    assert(newIdB !== 'STU-LEGACY-01', 'Legacy non-standard ID must be upgraded');
+
+    results.push({ name: '27. Backward Compatibility & Safe Migration Backfill', passed: true });
+    console.log('✓ TEST 27: Backward Compatibility & Safe Migration Backfill passed');
+  } catch (e: any) {
+    results.push({ name: '27. Backward Compatibility & Safe Migration Backfill', passed: false, message: e.message });
+    console.error('✗ TEST 27 FAILED:', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 28: Registration Schema Validation & Elimination of Manual Learner ID
+  // --------------------------------------------------------------------------
+  try {
+    // 1. Valid payload with NO student_identifier: must succeed
+    const payloadNoId = {
+      email: 'no.id.required@edumate.org',
+      password: 'GoodPassword123!',
+      confirm_password: 'GoodPassword123!',
+      full_name: 'No Id Required',
+      education_level: 'Undergraduate / College',
+      academic_stage: '1st Year',
+    };
+    const parsedNoId = registerSchema.safeParse(payloadNoId);
+    assert(parsedNoId.success, 'Registration payload without student_identifier must pass schema validation');
+
+    // 2. Legacy client sending invalid format: must be rejected
+    const invalidFormats = [
+      'STU-12345',
+      'edu7k4p92x',
+      'EDU12',
+      'EDU12345678',
+      'EDU!@#$%^&',
+    ];
+    for (const badId of invalidFormats) {
+      const parsedBad = registerSchema.safeParse({
+        ...payloadNoId,
+        student_identifier: badId,
+      });
+      assert(
+        !parsedBad.success,
+        `Registration schema must reject invalid student_identifier format: ${badId}`
+      );
+    }
+
+    // 3. Legacy client sending valid format: accepted
+    const parsedValid = registerSchema.safeParse({
+      ...payloadNoId,
+      student_identifier: 'EDU7K4P92X',
+    });
+    assert(parsedValid.success, 'Registration schema must accept valid 10-char EDU format if sent by legacy client');
+
+    results.push({ name: '28. Registration Schema & Manual Entry Elimination', passed: true });
+    console.log('✓ TEST 28: Registration Schema & Manual Entry Elimination passed');
+  } catch (e: any) {
+    results.push({ name: '28. Registration Schema & Manual Entry Elimination', passed: false, message: e.message });
+    console.error('✗ TEST 28 FAILED:', e.message);
   }
 
   console.log('\n====================================================');

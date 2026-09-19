@@ -35,6 +35,8 @@ export function isValidEmail(email: string): boolean {
   return PRACTICAL_EMAIL_REGEX.test(trimmed);
 }
 
+export const LEARNER_ID_REGEX = /^EDU[A-Z0-9]{7}$/;
+
 export const EDUCATION_LEVELS = [
   'School',
   'Undergraduate / College',
@@ -143,7 +145,9 @@ export const registerSchema = z
     student_identifier: z
       .string()
       .trim()
-      .max(100, { message: 'Student ID must not exceed 100 characters' })
+      .regex(LEARNER_ID_REGEX, {
+        message: 'Learner ID must be exactly 10 characters starting with EDU followed by 7 uppercase alphanumeric characters (e.g. EDU7K4P92X)',
+      })
       .optional()
       .nullable(),
   })
@@ -234,12 +238,6 @@ export const updateProfileSchema = z.object({
     .int()
     .min(1)
     .max(5)
-    .optional()
-    .nullable(),
-  student_identifier: z
-    .string()
-    .trim()
-    .max(100)
     .optional()
     .nullable(),
 });

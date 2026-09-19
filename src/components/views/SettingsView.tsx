@@ -48,9 +48,14 @@ export const SettingsView: React.FC = () => {
           <div>
             <h3 className="text-[17px] font-bold text-[#0b1c30]">{displayName}</h3>
             <p className="text-[13px] text-[#44474d]">{levelOrDept} • {stage}</p>
-            <p className="text-[11px] text-[#75777e] mt-0.5">
-              {studentId ? `ID: ${studentId} • ` : ''}{userEmail}
-            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-1.5">
+              {studentId && (
+                <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-blue-50 text-[#0051d5] border border-blue-200">
+                  Learner ID: {studentId}
+                </span>
+              )}
+              <span className="text-[11px] text-[#75777e]">{userEmail}</span>
+            </div>
           </div>
         </div>
         <span className="text-[11px] font-bold bg-[#eff4ff] text-[#0051d5] px-3 py-1 rounded-full">

@@ -45,3 +45,30 @@ export function generateSessionToken(): string {
 export function hashSessionToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
+
+const LEARNER_ID_CHARSET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+/**
+ * Generates a permanent Learner ID using a cryptographically secure random source (crypto.randomInt).
+ * Exactly 10 characters: 'EDU' prefix followed by 7 uppercase alphanumeric characters [A-Z0-9].
+ * Zero modulo bias; does NOT use Math.random().
+ */
+export function generateLearnerId(): string {
+  let suffix = '';
+  for (let i = 0; i < 7; i++) {
+    const idx = crypto.randomInt(0, LEARNER_ID_CHARSET.length);
+    suffix += LEARNER_ID_CHARSET[idx];
+  }
+  return `EDU${suffix}`;
+}
+
+/**
+ * Validates whether a candidate string matches the exact Learner ID format:
+ * ^EDU[A-Z0-9]{7}$ (exactly 10 characters: 'EDU' + 7 uppercase A-Z or digits 0-9).
+ */
+export function isValidLearnerId(id: string): boolean {
+  if (typeof id !== 'string' || id.length !== 10) {
+    return false;
+  }
+  return /^EDU[A-Z0-9]{7}$/.test(id);
+}

@@ -90,7 +90,6 @@ export const AuthView: React.FC = () => {
   const [customStage, setCustomStage] = useState<string>('');
   const [institution, setInstitution] = useState('');
   const [department, setDepartment] = useState('');
-  const [studentIdentifier, setStudentIdentifier] = useState('');
   const [localValidationErr, setLocalValidationErr] = useState<string | null>(null);
 
   const handleEducationLevelChange = (level: EducationLevelType) => {
@@ -161,7 +160,6 @@ export const AuthView: React.FC = () => {
         academic_stage: finalStage,
         institution: institution.trim() || undefined,
         department: department.trim() || undefined,
-        student_identifier: studentIdentifier.trim() || undefined,
       });
       setSubmitting(false);
     }
@@ -397,19 +395,6 @@ export const AuthView: React.FC = () => {
                       className="w-full bg-[#091124] border border-white/10 rounded-xl px-3 py-2 text-[13px] text-white placeholder:text-[#55698b] focus:outline-none focus:border-blue-500 transition-all"
                     />
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-[#93a7cf] mb-1.5">
-                    Student ID (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. STU-2026-001"
-                    value={studentIdentifier}
-                    onChange={(e) => setStudentIdentifier(e.target.value)}
-                    className="w-full bg-[#091124] border border-white/10 rounded-xl px-3 py-2 text-[13px] text-white placeholder:text-[#55698b] focus:outline-none focus:border-blue-500 transition-all"
-                  />
                 </div>
               </>
             )}

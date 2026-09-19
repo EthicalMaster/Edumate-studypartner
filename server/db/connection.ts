@@ -14,19 +14,27 @@ let poolInstance: pg.Pool | null = null;
  * If DATABASE_URL is not configured, returns null without attempting to connect.
  */
 export function getPool(): pg.Pool | null {
+  if (poolInstance) {
+    return poolInstance;
+  }
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     return null;
   }
-  if (!poolInstance) {
-    poolInstance = new Pool({
-      connectionString,
-      max: 20, // maximum connection pool size
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
-    });
-  }
+  poolInstance = new Pool({
+    connectionString,
+    max: 20, // maximum connection pool size
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
+  });
   return poolInstance;
+}
+
+/**
+ * Injects a pool instance for testing purposes.
+ */
+export function setPoolForTesting(testPool: any): void {
+  poolInstance = testPool;
 }
 
 /**
