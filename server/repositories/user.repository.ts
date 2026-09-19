@@ -1,0 +1,305 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { getPool } from '../db/connection.js';
+import type { RegisterInput, UpdateProfileInput } from '../utils/validation.js';
+
+export interface UserRecord {
+  id: string;
+  email: string;
+  password_hash: string | null;
+  role: 'STUDENT';
+  is_active: boolean;
+  email_verified: boolean;
+  auth_provider: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface StudentProfileRecord {
+  id: string;
+  user_id: string;
+  full_name: string;
+  institution: string | null;
+  department: string | null;
+  current_year: number | null;
+  student_identifier: string | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface SafeStudentUser {
+  id: string;
+  email: string;
+  role: 'STUDENT';
+  is_active: boolean;
+  email_verified: boolean;
+  auth_provider: string;
+  profile: {
+    id: string;
+    full_name: string;
+    institution: string | null;
+    department: string | null;
+    current_year: number | null;
+    student_identifier: string | null;
+  };
+}
+
+export class UserRepository {
+  /**
+   * Finds a user record along with student profile by normalized email address.
+   */
+  async findByEmail(email: string): Promise<{ user: UserRecord; profile: StudentProfileRecord } | null> {
+    const pool = getPool();
+    if (!pool) {
+      throw new Error('DATABASE_NOT_CONFIGURED');
+    }
+
+    const queryText = `
+      SELECT 
+        u.id as user_id,
+        u.email,
+        u.password_hash,
+        u.role,
+        u.is_active,
+        u.email_verified,
+        u.auth_provider,
+        u.created_at as user_created_at,
+        u.updated_at as user_updated_at,
+        p.id as profile_id,
+        p.full_name,
+        p.institution,
+        p.department,
+        p.current_year,
+        p.student_identifier,
+        p.created_at as profile_created_at,
+        p.updated_at as profile_updated_at
+      FROM users u
+      LEFT JOIN student_profiles p ON p.user_id = u.id
+      WHERE LOWER(u.email) = LOWER($1)
+      LIMIT 1;
+    `;
+
+    const res = await pool.query(queryText, [email.trim().toLowerCase()]);
+    if (res.rows.length === 0) {
+      return null;
+    }
+
+    const row = res.rows[0];
+    const user: UserRecord = {
+      id: row.user_id,
+      email: row.email,
+      password_hash: row.password_hash,
+      role: row.role,
+      is_active: row.is_active,
+      email_verified: Boolean(row.email_verified),
+      auth_provider: row.auth_provider || 'local',
+      created_at: row.user_created_at,
+      updated_at: row.user_updated_at,
+    };
+
+    const profile: StudentProfileRecord = {
+      id: row.profile_id,
+      user_id: row.user_id,
+      full_name: row.full_name,
+      institution: row.institution,
+      department: row.department,
+      current_year: row.current_year,
+      student_identifier: row.student_identifier,
+      created_at: row.profile_created_at,
+      updated_at: row.profile_updated_at,
+    };
+
+    return { user, profile };
+  }
+
+  /**
+   * Finds a user record along with student profile by user ID.
+   */
+  async findById(userId: string): Promise<SafeStudentUser | null> {
+    const pool = getPool();
+    if (!pool) {
+      throw new Error('DATABASE_NOT_CONFIGURED');
+    }
+
+    const queryText = `
+      SELECT 
+        u.id as user_id,
+        u.email,
+        u.role,
+        u.is_active,
+        u.email_verified,
+        u.auth_provider,
+        p.id as profile_id,
+        p.full_name,
+        p.institution,
+        p.department,
+        p.current_year,
+        p.student_identifier
+      FROM users u
+      LEFT JOIN student_profiles p ON p.user_id = u.id
+      WHERE u.id = $1
+      LIMIT 1;
+    `;
+
+    const res = await pool.query(queryText, [userId]);
+    if (res.rows.length === 0) {
+      return null;
+    }
+
+    const row = res.rows[0];
+    return {
+      id: row.user_id,
+      email: row.email,
+      role: row.role,
+      is_active: row.is_active,
+      email_verified: Boolean(row.email_verified),
+      auth_provider: row.auth_provider || 'local',
+      profile: {
+        id: row.profile_id,
+        full_name: row.full_name,
+        institution: row.institution,
+        department: row.department,
+        current_year: row.current_year,
+        student_identifier: row.student_identifier,
+      },
+    };
+  }
+
+  /**
+   * Atomically creates both user and student profile within a single PostgreSQL transaction.
+   */
+  async createUserWithProfile(
+    input: RegisterInput,
+    passwordHash: string
+  ): Promise<SafeStudentUser> {
+    const pool = getPool();
+    if (!pool) {
+      throw new Error('DATABASE_NOT_CONFIGURED');
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const normalizedEmail = input.email.trim().toLowerCase();
+
+      // 1. Insert user
+      const userRes = await client.query<{
+        id: string;
+        email: string;
+        role: 'STUDENT';
+        is_active: boolean;
+        email_verified: boolean;
+        auth_provider: string;
+      }>(
+        `INSERT INTO users (email, password_hash, role, is_active, email_verified, auth_provider)
+         VALUES ($1, $2, 'STUDENT', true, false, 'local')
+         RETURNING id, email, role, is_active, email_verified, auth_provider;`,
+        [normalizedEmail, passwordHash]
+      );
+      const newUser = userRes.rows[0];
+
+      // 2. Insert corresponding student profile
+      const profileRes = await client.query<{
+        id: string;
+        full_name: string;
+        institution: string | null;
+        department: string | null;
+        current_year: number | null;
+        student_identifier: string | null;
+      }>(
+        `INSERT INTO student_profiles (user_id, full_name, institution, department, current_year, student_identifier)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, full_name, institution, department, current_year, student_identifier;`,
+        [
+          newUser.id,
+          input.full_name.trim(),
+          input.institution ? input.institution.trim() : null,
+          input.department ? input.department.trim() : null,
+          input.current_year ?? null,
+          input.student_identifier ? input.student_identifier.trim() : null,
+        ]
+      );
+      const newProfile = profileRes.rows[0];
+
+      await client.query('COMMIT');
+
+      return {
+        id: newUser.id,
+        email: newUser.email,
+        role: newUser.role,
+        is_active: newUser.is_active,
+        email_verified: Boolean(newUser.email_verified),
+        auth_provider: newUser.auth_provider || 'local',
+        profile: {
+          id: newProfile.id,
+          full_name: newProfile.full_name,
+          institution: newProfile.institution,
+          department: newProfile.department,
+          current_year: newProfile.current_year,
+          student_identifier: newProfile.student_identifier,
+        },
+      };
+    } catch (err: any) {
+      await client.query('ROLLBACK');
+      // PostgreSQL unique violation error code 23505
+      if (err.code === '23505') {
+        const error = new Error('An account with this email address already exists.');
+        (error as any).code = 'DUPLICATE_EMAIL';
+        throw error;
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Updates student profile fields for the authenticated student.
+   */
+  async updateProfile(userId: string, data: UpdateProfileInput): Promise<SafeStudentUser | null> {
+    const pool = getPool();
+    if (!pool) {
+      throw new Error('DATABASE_NOT_CONFIGURED');
+    }
+
+    const updates: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (data.full_name !== undefined) {
+      updates.push(`full_name = $${idx++}`);
+      values.push(data.full_name.trim());
+    }
+    if (data.institution !== undefined) {
+      updates.push(`institution = $${idx++}`);
+      values.push(data.institution ? data.institution.trim() : null);
+    }
+    if (data.department !== undefined) {
+      updates.push(`department = $${idx++}`);
+      values.push(data.department ? data.department.trim() : null);
+    }
+    if (data.current_year !== undefined) {
+      updates.push(`current_year = $${idx++}`);
+      values.push(data.current_year);
+    }
+    if (data.student_identifier !== undefined) {
+      updates.push(`student_identifier = $${idx++}`);
+      values.push(data.student_identifier ? data.student_identifier.trim() : null);
+    }
+
+    if (updates.length > 0) {
+      updates.push(`updated_at = NOW()`);
+      values.push(userId);
+      const sql = `UPDATE student_profiles SET ${updates.join(', ')} WHERE user_id = $${idx};`;
+      await pool.query(sql, values);
+    }
+
+    return this.findById(userId);
+  }
+}
+
+export const userRepository = new UserRepository();
