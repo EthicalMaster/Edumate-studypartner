@@ -114,3 +114,179 @@ export interface StudentUser {
   profile: StudentProfile;
 }
 
+// ============================================================================
+// Phase 4: Real Quiz Engine Types
+// ============================================================================
+
+export type QuizMode = 'PRACTICE' | 'EXAM';
+export type QuizQuestionType =
+  | 'MCQ'
+  | 'MULTIPLE_SELECT'
+  | 'TRUE_FALSE'
+  | 'FILL_BLANK'
+  | 'VERY_SHORT'
+  | 'SHORT'
+  | 'LONG';
+
+export interface Quiz {
+  id: string;
+  student_id: string;
+  study_kit_id: string | null;
+  title: string;
+  description: string | null;
+  mode: QuizMode;
+  source: string;
+  subject: string;
+  topic: string;
+  question_count: number;
+  total_marks: number;
+  time_limit_minutes: number;
+  difficulty: string;
+  is_diagnostic: boolean;
+  negative_marking: boolean;
+  negative_mark_value: number;
+  randomization: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SafeQuizQuestion {
+  id: string;
+  quiz_id: string;
+  question_order: number;
+  question_text: string;
+  question_type: QuizQuestionType;
+  options: { id: string; text: string }[];
+  marks: number;
+  section: string;
+  topic: string | null;
+}
+
+export interface QuizSession {
+  id: string;
+  student_id: string;
+  quiz_id: string;
+  start_time: string;
+  server_deadline: string;
+  time_limit_seconds: number;
+  status: 'created' | 'active' | 'submitted' | 'expired' | 'auto_submitted';
+  submission_reason: string | null;
+  mode: QuizMode;
+  question_order: string[];
+  scoring_config: {
+    negative_marking: boolean;
+    negative_mark_value: number;
+    total_marks: number;
+  };
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface QuestionReviewItem {
+  id: string;
+  question_order: number;
+  question_text: string;
+  question_type: string;
+  section: string;
+  topic: string | null;
+  marks_possible: number;
+  marks_earned: number;
+  status: 'correct' | 'incorrect' | 'skipped' | 'manual_evaluation';
+  student_selected_option_ids: string[];
+  student_answer_text: string | null;
+  correct_option_ids: string[];
+  correct_answer_text: string | null;
+  explanation: string;
+  formula_hint: string | null;
+  options: { id: string; text: string }[];
+}
+
+export interface QuizResult {
+  id: string;
+  session_id: string;
+  student_id: string;
+  quiz_id: string;
+  total_questions: number;
+  attempted_questions: number;
+  correct_answers: number;
+  incorrect_answers: number;
+  skipped_questions: number;
+  score_obtained: number;
+  total_possible_score: number;
+  percentage: number;
+  negative_marks_deducted: number;
+  time_taken_seconds: number;
+  submission_reason: string;
+  subject_breakdown: Record<string, any>;
+  topic_breakdown: Record<string, any>;
+  section_breakdown: Record<string, any>;
+  submitted_at: string;
+}
+
+export interface DetailedQuizResult {
+  result: QuizResult;
+  review: QuestionReviewItem[];
+  quiz: {
+    id: string;
+    title: string;
+    subject: string;
+    topic: string;
+    mode: QuizMode;
+    difficulty: string;
+    total_marks: number;
+    time_limit_minutes: number;
+    negative_marking: boolean;
+    negative_mark_value: number;
+  };
+}
+
+export interface QuizHistoryItem {
+  id: string;
+  session_id: string;
+  quiz_id: string;
+  quiz_title: string;
+  subject: string;
+  topic: string;
+  mode: QuizMode;
+  difficulty: string;
+  total_questions: number;
+  attempted_questions: number;
+  correct_answers: number;
+  score_obtained: number;
+  total_possible_score: number;
+  percentage: number;
+  negative_marks_deducted: number;
+  time_taken_seconds: number;
+  time_limit_minutes: number;
+  submission_reason: string;
+  status: string;
+  submitted_at: string;
+}
+
+export interface QuestionBankMeta {
+  subjects: {
+    name: string;
+    topics: string[];
+    total_questions: number;
+  }[];
+  difficulties: string[];
+  question_types: string[];
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  displayName: string;
+  totalScore: number;
+  averagePercentage: number;
+  quizzesCompleted: number;
+  totalCorrect: number;
+  isCurrentUser: boolean;
+}
+
+export interface LeaderboardResponse {
+  top10: LeaderboardEntry[];
+  currentUser: LeaderboardEntry | null;
+  totalParticipants: number;
+}
+
+

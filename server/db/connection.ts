@@ -31,6 +31,17 @@ export function getPool(): pg.Pool | null {
 }
 
 /**
+ * Returns the active pool or throws an error if DATABASE_URL is not configured.
+ */
+export function getRequiredPool(): pg.Pool {
+  const p = getPool();
+  if (!p) {
+    throw new Error('DATABASE_URL is not configured. Database connection is required.');
+  }
+  return p;
+}
+
+/**
  * Injects a pool instance for testing purposes.
  */
 export function setPoolForTesting(testPool: any): void {

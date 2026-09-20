@@ -206,7 +206,14 @@ function AuthenticatedApp() {
             />
           )}
 
-          {activeTab === 'peer-comparison' && <PeerComparisonView />}
+          {activeTab === 'peer-comparison' && (
+            <PeerComparisonView
+              onNavigate={(tab) => {
+                setActiveTab(tab);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          )}
 
           {activeTab === 'settings' && <SettingsView />}
         </main>

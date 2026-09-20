@@ -9,6 +9,8 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { authRouter } from './server/routes/auth.routes.js';
+import { quizRouter } from './server/routes/quiz.routes.js';
+import { leaderboardRouter } from './server/routes/leaderboard.routes.js';
 import { checkConnection } from './server/db/connection.js';
 
 // Server entry point
@@ -35,6 +37,27 @@ async function startServer() {
   // Mount Authentication Router
   app.use('/api/auth', authRouter);
 
+  // Mount Leaderboard Router
+  app.use('/api/leaderboard', leaderboardRouter);
+
+  // Mount Quiz Router (handles /api/quizzes, /api/quiz-sessions, /api/quiz-results, /api/quiz-history)
+  app.use('/api/quizzes', quizRouter);
+  app.use('/api/quiz-sessions', (req, res, next) => {
+    // Rewrites /api/quiz-sessions/* to /sessions/* on quizRouter
+    req.url = `/sessions${req.url === '/' ? '' : req.url}`;
+    quizRouter(req, res, next);
+  });
+  app.use('/api/quiz-results', (req, res, next) => {
+    // Rewrites /api/quiz-results/* to /results/* on quizRouter
+    req.url = `/results${req.url === '/' ? '' : req.url}`;
+    quizRouter(req, res, next);
+  });
+  app.use('/api/quiz-history', (req, res, next) => {
+    // Rewrites /api/quiz-history to /history/attempts on quizRouter
+    req.url = `/history/attempts`;
+    quizRouter(req, res, next);
+  });
+
   // Vite middleware for development vs static build for production
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -50,8 +73,18 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '0.0.0.0', async () => {
     console.log(`[EDUMATE] Server running on http://0.0.0.0:${PORT}`);
+    try {
+      const dbConnected = await checkConnection();
+      if (dbConnected) {
+        console.log('[EDUMATE] PostgreSQL database connection verified.');
+      } else {
+        console.warn('[EDUMATE] Running without PostgreSQL connection (check DATABASE_URL).');
+      }
+    } catch (err) {
+      console.warn('[EDUMATE] Database health check warning:', err);
+    }
   });
 }
 

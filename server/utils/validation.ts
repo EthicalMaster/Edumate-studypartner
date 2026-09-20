@@ -245,3 +245,120 @@ export const updateProfileSchema = z.object({
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+// ============================================================================
+// Phase 4: Quiz Engine & Paper Builder Schemas
+// ============================================================================
+
+export const QUIZ_QUESTION_TYPES = [
+  'MCQ',
+  'MULTIPLE_SELECT',
+  'TRUE_FALSE',
+  'FILL_BLANK',
+  'VERY_SHORT',
+  'SHORT',
+  'LONG',
+] as const;
+
+export type QuizQuestionType = (typeof QUIZ_QUESTION_TYPES)[number];
+
+export const createQuizSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(1, { message: 'Quiz title is required' })
+    .max(200, { message: 'Title must not exceed 200 characters' }),
+  description: z.string().trim().max(1000).optional().nullable(),
+  mode: z.enum(['PRACTICE', 'EXAM', 'practice', 'exam']).default('PRACTICE'),
+  source: z.enum(['question_bank', 'topic', 'subject', 'uploaded_material']).default('question_bank'),
+  subject: z
+    .string()
+    .trim()
+    .min(1, { message: 'Subject is required' })
+    .max(100),
+  topic: z
+    .string()
+    .trim()
+    .min(1, { message: 'Topic is required' })
+    .max(150),
+  question_count: z
+    .coerce
+    .number()
+    .int()
+    .refine((val) => [5, 10, 15, 20, 30, 50].includes(val), {
+      message: 'Question count must be 5, 10, 15, 20, 30, or 50',
+    }),
+  time_limit_minutes: z
+    .coerce
+    .number()
+    .int()
+    .refine((val) => [5, 10, 15, 30, 45, 60].includes(val), {
+      message: 'Time limit must be 5, 10, 15, 30, 45, or 60 minutes',
+    }),
+  difficulty: z
+    .enum(['easy', 'medium', 'hard', 'mixed', 'Easy', 'Medium', 'Hard', 'Mixed'])
+    .default('medium'),
+  question_types: z
+    .array(z.enum(QUIZ_QUESTION_TYPES))
+    .min(1, { message: 'At least one question type must be selected' })
+    .optional(),
+  negative_marking: z.boolean().default(false),
+  negative_mark_value: z.coerce.number().min(0).max(5).default(0),
+  randomization: z.boolean().default(false),
+  sections: z.array(z.string().trim()).optional(),
+  custom_questions: z
+    .array(
+      z.object({
+        question_text: z.string().min(1, 'Question text is required'),
+        question_type: z.enum(QUIZ_QUESTION_TYPES),
+        options: z
+          .array(
+            z.object({
+              id: z.string(),
+              text: z.string(),
+            })
+          )
+          .default([]),
+        correct_option_ids: z.array(z.string()).default([]),
+        correct_answer_text: z.string().optional(),
+        explanation: z.string().default(''),
+        formula_hint: z.string().optional(),
+        marks: z.coerce.number().min(0.5).max(50).default(1),
+        section: z.string().default('Section A'),
+        topic: z.string().optional(),
+      })
+    )
+    .optional(),
+});
+
+export const createQuizSessionSchema = z.object({
+  quiz_id: z.string().uuid({ message: 'A valid Quiz UUID is required' }),
+});
+
+export const submitAnswerSchema = z.object({
+  question_id: z.string().uuid({ message: 'A valid Question UUID is required' }),
+  selected_option_ids: z.array(z.string()).default([]),
+  answer_text: z.string().trim().max(10000).optional().nullable(),
+  time_spent_seconds: z.coerce.number().int().min(0).default(0),
+});
+
+export const submitQuizSchema = z.object({
+  submission_reason: z
+    .enum([
+      'manual',
+      'manual_submit',
+      'timeout',
+      'time_expired',
+      'tab_switch',
+      'navigation',
+      'system',
+      'auto_submit',
+    ])
+    .default('manual_submit'),
+});
+
+export type CreateQuizInput = z.infer<typeof createQuizSchema>;
+export type CreateQuizSessionInput = z.infer<typeof createQuizSessionSchema>;
+export type SubmitAnswerInput = z.infer<typeof submitAnswerSchema>;
+export type SubmitQuizInput = z.infer<typeof submitQuizSchema>;
+
