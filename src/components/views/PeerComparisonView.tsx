@@ -38,7 +38,7 @@ export const PeerComparisonView: React.FC<PeerComparisonViewProps> = ({ onNaviga
   const isUserInTop10 = data?.top10?.some((e) => e.isCurrentUser);
 
   return (
-    <div className="flex flex-col gap-6 pb-28 max-w-5xl mx-auto">
+    <div className="flex flex-col gap-6 pb-12 max-w-5xl mx-auto">
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

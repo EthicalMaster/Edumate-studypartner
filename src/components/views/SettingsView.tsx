@@ -21,7 +21,7 @@ export const SettingsView: React.FC = () => {
   const userEmail = user?.email || 'user@edumate.internal';
 
   return (
-    <div className="flex flex-col gap-6 pb-28 max-w-3xl mx-auto">
+    <div className="flex flex-col gap-6 pb-12 max-w-3xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-[22px] font-bold text-[#0b1c30] tracking-tight font-['Inter']">

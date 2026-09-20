@@ -191,7 +191,7 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({
   });
 
   return (
-    <div className="flex flex-col gap-6 pb-28 max-w-6xl mx-auto">
+    <div className="flex flex-col gap-6 pb-12 max-w-6xl mx-auto">
       {/* View Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

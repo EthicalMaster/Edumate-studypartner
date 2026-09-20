@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActiveNavTab, StudyKit, WeakTopic } from '../../types';
 import { SUBJECT_MASTERY_STATS } from '../../data/initialData';
+import { useAuth } from '../../context/AuthContext';
 
 interface HomeViewProps {
   onNavigate: (tab: ActiveNavTab) => void;
@@ -23,16 +24,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
   weakTopics,
   onSelectWeakTopic,
 }) => {
+  const { user } = useAuth();
+  const studentName = user?.profile?.full_name || 'Student';
   const activeKit = studyKits[0]; // Electrostatics
 
   return (
-    <div className="flex flex-col w-full gap-6 pb-28">
+    <div className="flex flex-col w-full gap-6 pb-12">
       {/* Top Greeting Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <h1 className="text-[24px] font-bold text-[#0b1c30] tracking-tight font-['Inter']">
-              Good morning, Vibhor
+              Good morning, {studentName}
             </h1>
             <span aria-label="Waving hand" className="text-2xl select-none" role="img">
               👋

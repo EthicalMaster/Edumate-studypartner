@@ -15,7 +15,7 @@ export const ProgressView: React.FC = () => {
   const maxHours = Math.max(...weeklyStudyData.map((d) => d.hours));
 
   return (
-    <div className="flex flex-col gap-6 pb-28">
+    <div className="flex flex-col gap-6 pb-12">
       <div>
         <h2 className="text-[22px] font-bold text-[#0b1c30] tracking-tight font-['Inter']">
           My Progress & Mastery Analytics

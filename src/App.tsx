@@ -10,7 +10,6 @@ import {
   INITIAL_FLASHCARDS,
   INITIAL_QUIZ_QUESTIONS,
   INITIAL_WEAK_TOPICS,
-  INITIAL_AUDIO_TRACK,
   INITIAL_NOTIFICATIONS,
 } from './data/initialData';
 
@@ -18,7 +17,6 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthView } from './components/auth/AuthView';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
-import { AudioDock } from './components/AudioDock';
 import { UploadModal } from './components/UploadModal';
 import { SummaryModal } from './components/SummaryModal';
 
@@ -41,7 +39,6 @@ function AuthenticatedApp() {
   const [flashcards, setFlashcards] = useState<Flashcard[]>(INITIAL_FLASHCARDS);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>(INITIAL_QUIZ_QUESTIONS);
   const [weakTopics, setWeakTopics] = useState<WeakTopic[]>(INITIAL_WEAK_TOPICS);
-  const [audioTrack, setAudioTrack] = useState(INITIAL_AUDIO_TRACK);
   const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
 
   // Modals
@@ -141,10 +138,7 @@ function AuthenticatedApp() {
               onOpenUpload={() => setIsUploadOpen(true)}
               onOpenSummary={() => setIsSummaryOpen(true)}
               onStartRemedialKit={handleGenerateRemedialKit}
-              onPlayAudioTrack={() => {
-                const playBtn = document.getElementById('play-pause-btn');
-                playBtn?.click();
-              }}
+              onPlayAudioTrack={() => {}}
               studyKits={studyKits}
               weakTopics={weakTopics}
               onSelectWeakTopic={(_topic) => {
@@ -164,10 +158,7 @@ function AuthenticatedApp() {
               }}
               onOpenUpload={() => setIsUploadOpen(true)}
               onOpenSummary={() => setIsSummaryOpen(true)}
-              onPlayAudioTrack={() => {
-                const playBtn = document.getElementById('play-pause-btn');
-                playBtn?.click();
-              }}
+              onPlayAudioTrack={() => {}}
             />
           )}
 
@@ -218,14 +209,6 @@ function AuthenticatedApp() {
           {activeTab === 'settings' && <SettingsView />}
         </main>
       </div>
-
-      {/* Floating Bottom Sticky Audio Dock */}
-      <AudioDock
-        track={audioTrack}
-        onSpeedChange={(newSpeed) =>
-          setAudioTrack((prev) => ({ ...prev, speed: newSpeed }))
-        }
-      />
 
       {/* Upload Ingestion Modal */}
       <UploadModal

@@ -16,7 +16,7 @@ export const WeakTopicsView: React.FC<WeakTopicsViewProps> = ({
   const [drillCompleted, setDrillCompleted] = useState<boolean>(false);
 
   return (
-    <div className="flex flex-col gap-6 pb-28">
+    <div className="flex flex-col gap-6 pb-12">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-[22px] font-bold text-[#0b1c30] tracking-tight font-['Inter']">

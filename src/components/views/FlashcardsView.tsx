@@ -57,7 +57,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-6 pb-28 max-w-4xl mx-auto">
+    <div className="flex flex-col gap-6 pb-12 max-w-4xl mx-auto">
       {/* Top Controls Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
