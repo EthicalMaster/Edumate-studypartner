@@ -4,25 +4,25 @@
  */
 
 import { IEmbeddingService, EmbeddingDiagnostics } from './types.js';
+import { PythonEmbeddingRunner, pythonEmbeddingRunner } from './python-embedding-runner.js';
 
 /**
  * Local self-hosted embedding service for BAAI/bge-small-en-v1.5.
+ * Powered by Python sentence-transformers subprocess runner.
  * Generates bounded 384-dimensional cosine-normalized embeddings.
  * Fully abstracted behind IEmbeddingService.
  */
 export class LocalBgeEmbeddingService implements IEmbeddingService {
   public readonly dimension = 384;
   public readonly version = '1.5';
-  public readonly device: 'cuda' | 'cpu';
 
   private static instance: LocalBgeEmbeddingService | null = null;
   private customAllowFallback: boolean | null = null;
-  private isRealEngineReady = false;
   private warnedFallback = false;
+  private runner: PythonEmbeddingRunner;
 
-  constructor() {
-    // Detect CUDA availability gracefully; defaults safely to CPU
-    this.device = this.detectDevice();
+  constructor(runner?: PythonEmbeddingRunner) {
+    this.runner = runner || pythonEmbeddingRunner;
   }
 
   public static getInstance(): LocalBgeEmbeddingService {
@@ -32,11 +32,12 @@ export class LocalBgeEmbeddingService implements IEmbeddingService {
     return LocalBgeEmbeddingService.instance;
   }
 
-  private detectDevice(): 'cuda' | 'cpu' {
-    if (process.env.DEVICE === 'cuda' || process.env.CUDA_VISIBLE_DEVICES !== undefined) {
-      return 'cuda';
-    }
-    return 'cpu';
+  public get device(): 'cuda' | 'cpu' {
+    return this.runner.getDevice();
+  }
+
+  public get isRealEngineReady(): boolean {
+    return this.runner.isAvailable();
   }
 
   public get fallbackAllowed(): boolean {
@@ -65,7 +66,7 @@ export class LocalBgeEmbeddingService implements IEmbeddingService {
     if (this.fallbackAllowed) {
       return 'TEST FALLBACK';
     }
-    return 'BAAI/bge-small-en-v1.5';
+    return 'UNAVAILABLE';
   }
 
   public getDiagnostics(): EmbeddingDiagnostics {
@@ -80,6 +81,10 @@ export class LocalBgeEmbeddingService implements IEmbeddingService {
     };
   }
 
+  public getRunner(): PythonEmbeddingRunner {
+    return this.runner;
+  }
+
   /**
    * Embeds an array of document chunks into normalized 384-dimensional vectors.
    */
@@ -89,6 +94,19 @@ export class LocalBgeEmbeddingService implements IEmbeddingService {
     }
     if (texts.length === 0) {
       return [];
+    }
+
+    if (this.isRealEngineReady) {
+      try {
+        return await this.runner.embed(texts, false);
+      } catch (err: any) {
+        console.error(`[EmbeddingService] Real Python embedding failed: ${err.message}`);
+        if (!this.fallbackAllowed) {
+          throw new Error(
+            `EmbeddingEngineUnavailable: Real embedding engine 'BAAI/bge-small-en-v1.5' failed: ${err.message}`
+          );
+        }
+      }
     }
 
     this.assertEngineReady();
@@ -102,6 +120,23 @@ export class LocalBgeEmbeddingService implements IEmbeddingService {
   public async embedQuery(text: string): Promise<number[]> {
     if (typeof text !== 'string') {
       throw new Error('Query must be a string.');
+    }
+
+    if (this.isRealEngineReady) {
+      try {
+        const results = await this.runner.embed([text], true);
+        if (results && results.length > 0) {
+          return results[0];
+        }
+        throw new Error('Empty vector array returned by Python engine');
+      } catch (err: any) {
+        console.error(`[EmbeddingService] Real Python query embedding failed: ${err.message}`);
+        if (!this.fallbackAllowed) {
+          throw new Error(
+            `EmbeddingEngineUnavailable: Real embedding engine 'BAAI/bge-small-en-v1.5' failed: ${err.message}`
+          );
+        }
+      }
     }
 
     this.assertEngineReady();

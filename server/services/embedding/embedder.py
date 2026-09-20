@@ -19,6 +19,11 @@ def get_device():
 def main():
     device = get_device()
     if len(sys.argv) > 1 and sys.argv[1] == "--device":
+        try:
+            import sentence_transformers
+        except Exception as e:
+            sys.stderr.write(f"SentenceTransformers load error: {e}\n")
+            sys.exit(1)
         print(json.dumps({"device": device, "model": "BAAI/bge-small-en-v1.5", "dimension": 384}))
         return
 
