@@ -15,9 +15,10 @@
     "db:seed": "tsx server/db/seed.ts",
     "db:seed:questions": "tsx server/db/seeds/question_bank.seed.ts",
     "db:verify": "tsx server/db/verify.ts",
-    "test": "npm run test:auth && npm run test:quiz && npm run test:leaderboard && npm run db:verify",
+    "test": "npm run test:auth && npm run test:quiz && npm run test:leaderboard && npm run test:materials && npm run db:verify",
     "test:auth": "tsx server/test/auth.test.ts",
     "test:leaderboard": "tsx server/test/leaderboard.test.ts",
+    "test:materials": "tsx server/test/material.test.ts",
     "test:quiz": "tsx server/test/quiz.test.ts"
   },
   "dependencies": {
@@ -31,6 +32,7 @@
     "express": "^4.21.2",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "multer": "^2.4.0",
     "pg": "^8.23.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
@@ -41,6 +43,7 @@
     "@types/canvas-confetti": "^1.9.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^4.17.21",
+    "@types/multer": "^2.2.0",
     "@types/node": "^22.14.0",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",

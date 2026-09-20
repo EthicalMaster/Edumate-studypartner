@@ -27,6 +27,20 @@ export interface StudyKit {
   accuracy: number;
 }
 
+export interface StudyMaterial {
+  id: string;
+  title: string;
+  originalFilename: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  subject: string;
+  topic: string;
+  processingStatus: 'uploaded' | 'processing' | 'ready' | 'failed';
+  processingError?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Flashcard {
   id: string;
   kitId: string;

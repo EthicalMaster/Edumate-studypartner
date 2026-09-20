@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { ActiveNavTab, StudyKit, Flashcard, QuizQuestion, WeakTopic, NotificationItem } from './types';
+import { ActiveNavTab, StudyKit, StudyMaterial, Flashcard, QuizQuestion, WeakTopic, NotificationItem } from './types';
 import {
   INITIAL_STUDY_KITS,
   INITIAL_FLASHCARDS,
@@ -44,8 +44,23 @@ function AuthenticatedApp() {
   // Modals
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+  const [materialsRefreshTrigger, setMaterialsRefreshTrigger] = useState(0);
 
-  // Handling new study kit upload
+  // Handling new study material upload (Phase 5)
+  const handleMaterialUploaded = (mat: StudyMaterial) => {
+    setMaterialsRefreshTrigger((prev) => prev + 1);
+    const newNotif: NotificationItem = {
+      id: `notif-${Date.now()}`,
+      title: `Material Uploaded: ${mat.title}`,
+      description: `Stored securely in your private study repository (${(mat.fileSizeBytes / (1024 * 1024)).toFixed(1)} MB).`,
+      timeAgo: 'Just now',
+      read: false,
+      type: 'system',
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+  };
+
+  // Handling legacy study kit upload
   const handleKitCreated = (newKit: StudyKit) => {
     setStudyKits((prev) => [newKit, ...prev]);
     // Also generate dummy flashcards & questions for this new kit
@@ -159,6 +174,7 @@ function AuthenticatedApp() {
               onOpenUpload={() => setIsUploadOpen(true)}
               onOpenSummary={() => setIsSummaryOpen(true)}
               onPlayAudioTrack={() => {}}
+              materialsRefreshTrigger={materialsRefreshTrigger}
             />
           )}
 
@@ -210,11 +226,11 @@ function AuthenticatedApp() {
         </main>
       </div>
 
-      {/* Upload Ingestion Modal */}
+      {/* Upload Study Material Modal */}
       <UploadModal
         isOpen={isUploadOpen}
         onClose={() => setIsUploadOpen(false)}
-        onKitCreated={handleKitCreated}
+        onMaterialUploaded={handleMaterialUploaded}
       />
 
       {/* AI Summary / Notes Cheat Sheet Modal */}
