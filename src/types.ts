@@ -41,6 +41,46 @@ export interface StudyMaterial {
   updatedAt: string;
 }
 
+export interface DocumentPage {
+  id: string;
+  pageNumber: number;
+  text: string;
+  characterCount: number;
+}
+
+export interface DocumentSection {
+  id: string;
+  parentSectionId: string | null;
+  sectionType: 'document' | 'chapter' | 'section' | 'topic' | 'subsection';
+  title: string;
+  sectionOrder: number;
+  pageStart: number;
+  pageEnd: number;
+  headingLevel: number;
+}
+
+export interface DocumentChunk {
+  id: string;
+  sectionId: string | null;
+  chunkIndex: number;
+  text: string;
+  pageStart: number;
+  pageEnd: number;
+  characterCount: number;
+  tokenEstimate: number;
+}
+
+export interface DocumentProcessingDetails {
+  materialId: string;
+  status: 'uploaded' | 'processing' | 'ready' | 'failed';
+  error: string | null;
+  pageCount: number;
+  sectionCount: number;
+  chunkCount: number;
+  totalCharacters: number;
+  updatedAt: string;
+}
+
 export interface Flashcard {
   id: string;
   kitId: string;

@@ -119,4 +119,85 @@ export const materialApi = {
   getDownloadUrl(id: string): string {
     return `/api/materials/${id}/download`;
   },
+
+  /**
+   * (Re)process an uploaded study material using deterministic document intelligence.
+   */
+  async reprocessMaterial(id: string): Promise<{ success: boolean; material: StudyMaterial; stats: any; message: string }> {
+    const res = await fetch(`/api/materials/${id}/process`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to reprocess study material.');
+    }
+
+    return res.json();
+  },
+
+  /**
+   * Fetch processing details and structural metrics.
+   */
+  async getProcessingDetails(id: string): Promise<{ processing: any }> {
+    const res = await fetch(`/api/materials/${id}/processing`, {
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to fetch processing details.');
+    }
+
+    return res.json();
+  },
+
+  /**
+   * Fetch extracted pages.
+   */
+  async getPages(id: string): Promise<{ pages: any[]; total: number }> {
+    const res = await fetch(`/api/materials/${id}/pages`, {
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to fetch document pages.');
+    }
+
+    return res.json();
+  },
+
+  /**
+   * Fetch detected sections outline.
+   */
+  async getSections(id: string): Promise<{ sections: any[]; total: number }> {
+    const res = await fetch(`/api/materials/${id}/sections`, {
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to fetch document sections.');
+    }
+
+    return res.json();
+  },
+
+  /**
+   * Fetch extracted chunks with preserved source traceability.
+   */
+  async getChunks(id: string): Promise<{ chunks: any[]; total: number }> {
+    const res = await fetch(`/api/materials/${id}/chunks`, {
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to fetch document chunks.');
+    }
+
+    return res.json();
+  },
 };

@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StudyKit, ActiveNavTab, StudyMaterial } from '../../types';
 import { materialApi } from '../../services/materialApi';
+import { DocumentInspectModal } from '../DocumentInspectModal';
 
 interface StudyKitsViewProps {
   studyKits: StudyKit[];
@@ -33,6 +34,8 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
   const [materialsError, setMaterialsError] = useState<string | null>(null);
   const [materialToDelete, setMaterialToDelete] = useState<StudyMaterial | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [inspectingMaterial, setInspectingMaterial] = useState<StudyMaterial | null>(null);
+  const [reprocessingId, setReprocessingId] = useState<string | null>(null);
 
   // Filters for Materials
   const [selectedSubject, setSelectedSubject] = useState<string>('All');
@@ -72,6 +75,20 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
       alert(err.message || 'Failed to delete material');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // Handle Reprocessing of a Document
+  const handleRetryProcessing = async (mat: StudyMaterial) => {
+    setReprocessingId(mat.id);
+    try {
+      await materialApi.reprocessMaterial(mat.id);
+      await fetchMaterials();
+    } catch (err: any) {
+      alert(err.message || 'Failed to reprocess study material.');
+      await fetchMaterials();
+    } finally {
+      setReprocessingId(null);
     }
   };
 
@@ -392,19 +409,68 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
                           <span>{formatDate(mat.createdAt)}</span>
                         </div>
                       </div>
+
+                      {/* Phase 6: Processing status notice / failure banner */}
+                      {mat.processingStatus === 'failed' && (
+                        <div className="mt-2.5 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[11px] space-y-1.5">
+                          <div className="flex items-start gap-1.5">
+                            <span className="material-symbols-outlined text-[15px] shrink-0 text-rose-600">error</span>
+                            <span className="leading-snug">
+                              {mat.processingError || 'Text extraction could not complete.'}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleRetryProcessing(mat)}
+                            disabled={reprocessingId === mat.id}
+                            className="w-full py-1 bg-white border border-rose-300 hover:bg-rose-100 text-rose-800 rounded-lg font-bold text-[11px] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
+                          >
+                            <span className={`material-symbols-outlined text-[13px] ${reprocessingId === mat.id ? 'animate-spin' : ''}`}>
+                              refresh
+                            </span>
+                            <span>{reprocessingId === mat.id ? 'Retrying...' : 'Retry Processing'}</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {mat.processingStatus === 'processing' && (
+                        <div className="mt-2.5 p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></span>
+                          <span>Extracting text and outline...</span>
+                        </div>
+                      )}
+
+                      {mat.processingStatus === 'uploaded' && (
+                        <div className="mt-2.5 p-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-[11px] flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-[14px]">hourglass_empty</span>
+                          <span>Preparing document structure...</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Actions Bar */}
                     <div className="pt-3.5 mt-3 border-t border-[#c5c6ce]/20 flex items-center justify-between gap-2">
-                      <a
-                        href={materialApi.getDownloadUrl(mat.id)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 text-[12px] font-bold text-[#0051d5] hover:text-[#316bf3] p-1.5 rounded-lg hover:bg-[#eff4ff] transition-colors"
-                      >
-                        <span className="material-symbols-outlined text-[17px]">download</span>
-                        <span>Download</span>
-                      </a>
+                      <div className="flex items-center gap-1">
+                        <a
+                          href={materialApi.getDownloadUrl(mat.id)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[12px] font-bold text-[#0051d5] hover:text-[#316bf3] p-1.5 rounded-lg hover:bg-[#eff4ff] transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[17px]">download</span>
+                          <span>Download</span>
+                        </a>
+
+                        {mat.processingStatus === 'ready' && (
+                          <button
+                            onClick={() => setInspectingMaterial(mat)}
+                            className="inline-flex items-center gap-1 text-[12px] font-bold text-emerald-700 hover:text-emerald-800 p-1.5 rounded-lg hover:bg-emerald-50 transition-colors cursor-pointer"
+                            title="Inspect extracted outline and chunks"
+                          >
+                            <span className="material-symbols-outlined text-[17px]">schema</span>
+                            <span>Inspect</span>
+                          </button>
+                        )}
+                      </div>
 
                       <button
                         onClick={() => setMaterialToDelete(mat)}
@@ -555,6 +621,14 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Phase 6: Document Intelligence Inspection Modal */}
+      <DocumentInspectModal
+        isOpen={Boolean(inspectingMaterial)}
+        material={inspectingMaterial}
+        onClose={() => setInspectingMaterial(null)}
+        onReprocessSuccess={fetchMaterials}
+      />
     </div>
   );
 };

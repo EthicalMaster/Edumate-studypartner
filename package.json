@@ -15,8 +15,9 @@
     "db:seed": "tsx server/db/seed.ts",
     "db:seed:questions": "tsx server/db/seeds/question_bank.seed.ts",
     "db:verify": "tsx server/db/verify.ts",
-    "test": "npm run test:auth && npm run test:quiz && npm run test:leaderboard && npm run test:materials && npm run db:verify",
+    "test": "npm run test:auth && npm run test:quiz && npm run test:leaderboard && npm run test:materials && npm run test:doc-intel && npm run db:verify",
     "test:auth": "tsx server/test/auth.test.ts",
+    "test:doc-intel": "tsx server/test/document-intelligence.test.ts",
     "test:leaderboard": "tsx server/test/leaderboard.test.ts",
     "test:materials": "tsx server/test/material.test.ts",
     "test:quiz": "tsx server/test/quiz.test.ts"
@@ -24,6 +25,7 @@
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/pdf-parse": "^1.1.5",
     "@vitejs/plugin-react": "^6.1.1",
     "argon2": "^0.45.1",
     "canvas-confetti": "^1.9.4",
@@ -33,6 +35,7 @@
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "multer": "^2.4.0",
+    "pdf-parse": "^2.4.5",
     "pg": "^8.23.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",

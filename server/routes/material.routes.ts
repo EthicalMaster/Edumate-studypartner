@@ -10,6 +10,8 @@ import path from 'path';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { materialRepository } from '../repositories/material.repository.js';
 import { storageService } from '../services/storage.service.js';
+import { documentProcessingService } from '../services/document-intelligence/processing.service.js';
+import { documentRepository } from '../repositories/document.repository.js';
 
 export const materialRouter = express.Router();
 
@@ -183,8 +185,7 @@ materialRouter.post(
       // Save file safely through storage abstraction (isolated collision-free key)
       const saveResult = await storageService.save(file.buffer, originalFilename, contentCheck.normalizedMime);
 
-      // Create persistent database record
-      // Status lifecycle: starts as 'uploaded', non-AI validation passes -> 'ready'
+      // Create persistent database record with 'uploaded' status
       const record = await materialRepository.createMaterial({
         studentId,
         title,
@@ -194,15 +195,37 @@ materialRouter.post(
         storageKey: saveResult.storageKey,
         subject,
         topic,
-        processingStatus: 'ready',
+        processingStatus: 'uploaded',
         processingError: null,
       });
 
-      const materialDTO = materialRepository.toDTO(record);
+      // Execute deterministic document intelligence pipeline (Phase 6)
+      let processResult = null;
+      let finalRecord = record;
+      try {
+        processResult = await documentProcessingService.processMaterial(record.id, studentId);
+        finalRecord = (await materialRepository.getMaterialById(record.id, studentId)) || record;
+      } catch (_procErr: any) {
+        // Status and error are safely recorded in database
+        finalRecord = (await materialRepository.getMaterialById(record.id, studentId)) || record;
+      }
+
+      const materialDTO = materialRepository.toDTO(finalRecord);
 
       res.status(201).json({
         material: materialDTO,
-        message: 'Study document successfully uploaded, validated, and indexed.',
+        stats: processResult
+          ? {
+              totalPages: processResult.totalPages,
+              totalSections: processResult.sections.length,
+              totalChunks: processResult.totalChunks,
+              totalCharacters: processResult.totalCharacters,
+            }
+          : undefined,
+        message:
+          finalRecord.processing_status === 'ready'
+            ? 'Study document successfully uploaded, parsed, and structured into knowledge units.'
+            : 'Study document uploaded, but text extraction could not complete.',
       });
     } catch (err: any) {
       console.error('[Material Routes] POST /api/materials error:', err);
@@ -361,6 +384,210 @@ materialRouter.delete('/:id', async (req: Request, res: Response): Promise<void>
     res.status(500).json({
       error: 'INTERNAL_ERROR',
       message: err.message || 'Failed to delete study material.',
+    });
+  }
+});
+
+// ============================================================================
+// Phase 6: Document Intelligence Endpoints
+// ============================================================================
+
+/**
+ * POST /api/materials/:id/process
+ * Idempotently (re)processes an uploaded study document.
+ * Enforces authenticated student ownership.
+ */
+materialRouter.post('/:id/process', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const studentId = getStudentProfileId(req);
+    const { id } = req.params;
+
+    const existing = await materialRepository.getMaterialById(id, studentId);
+    if (!existing) {
+      res.status(404).json({
+        error: 'MATERIAL_NOT_FOUND',
+        message: 'Study material not found.',
+      });
+      return;
+    }
+
+    const processResult = await documentProcessingService.processMaterial(id, studentId);
+    const updatedRecord = await materialRepository.getMaterialById(id, studentId);
+
+    res.json({
+      success: true,
+      material: updatedRecord ? materialRepository.toDTO(updatedRecord) : null,
+      stats: {
+        totalPages: processResult.totalPages,
+        totalSections: processResult.sections.length,
+        totalChunks: processResult.totalChunks,
+        totalCharacters: processResult.totalCharacters,
+      },
+      message: 'Document successfully processed and structured.',
+    });
+  } catch (err: any) {
+    console.error('[Material Routes] POST /api/materials/:id/process error:', err);
+    res.status(400).json({
+      error: 'PROCESSING_FAILED',
+      message: err.message || 'Failed to process document.',
+    });
+  }
+});
+
+/**
+ * GET /api/materials/:id/processing
+ * Retrieves processing status, error (if any), and structural counts.
+ */
+materialRouter.get('/:id/processing', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const studentId = getStudentProfileId(req);
+    const { id } = req.params;
+
+    const details = await documentRepository.getProcessingDetails(id, studentId);
+    if (!details) {
+      res.status(404).json({
+        error: 'MATERIAL_NOT_FOUND',
+        message: 'Study material not found.',
+      });
+      return;
+    }
+
+    res.json({
+      processing: details,
+    });
+  } catch (err: any) {
+    console.error('[Material Routes] GET /api/materials/:id/processing error:', err);
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: err.message || 'Failed to retrieve processing details.',
+    });
+  }
+});
+
+/**
+ * GET /api/materials/:id/pages
+ * Retrieves the extracted pages for a study material.
+ */
+materialRouter.get('/:id/pages', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const studentId = getStudentProfileId(req);
+    const { id } = req.params;
+
+    const existing = await materialRepository.getMaterialById(id, studentId);
+    if (!existing) {
+      res.status(404).json({
+        error: 'MATERIAL_NOT_FOUND',
+        message: 'Study material not found.',
+      });
+      return;
+    }
+
+    const pages = await documentRepository.getPagesByMaterial(id, studentId);
+    const sanitizedPages = pages.map((p) => ({
+      id: p.id,
+      pageNumber: p.page_number,
+      text: p.text,
+      characterCount: p.character_count,
+    }));
+
+    res.json({
+      materialId: id,
+      pages: sanitizedPages,
+      total: sanitizedPages.length,
+    });
+  } catch (err: any) {
+    console.error('[Material Routes] GET /api/materials/:id/pages error:', err);
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: err.message || 'Failed to retrieve document pages.',
+    });
+  }
+});
+
+/**
+ * GET /api/materials/:id/sections
+ * Retrieves the detected document outline / sections.
+ */
+materialRouter.get('/:id/sections', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const studentId = getStudentProfileId(req);
+    const { id } = req.params;
+
+    const existing = await materialRepository.getMaterialById(id, studentId);
+    if (!existing) {
+      res.status(404).json({
+        error: 'MATERIAL_NOT_FOUND',
+        message: 'Study material not found.',
+      });
+      return;
+    }
+
+    const sections = await documentRepository.getSectionsByMaterial(id, studentId);
+    const sanitizedSections = sections.map((s) => ({
+      id: s.id,
+      parentSectionId: s.parent_section_id,
+      sectionType: s.section_type,
+      title: s.title,
+      sectionOrder: s.section_order,
+      pageStart: s.page_start,
+      pageEnd: s.page_end,
+      headingLevel: s.heading_level,
+    }));
+
+    res.json({
+      materialId: id,
+      sections: sanitizedSections,
+      total: sanitizedSections.length,
+    });
+  } catch (err: any) {
+    console.error('[Material Routes] GET /api/materials/:id/sections error:', err);
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: err.message || 'Failed to retrieve document sections.',
+    });
+  }
+});
+
+/**
+ * GET /api/materials/:id/chunks
+ * Retrieves the extracted chunks with preserved source traceability for future RAG.
+ */
+materialRouter.get('/:id/chunks', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const studentId = getStudentProfileId(req);
+    const { id } = req.params;
+
+    const existing = await materialRepository.getMaterialById(id, studentId);
+    if (!existing) {
+      res.status(404).json({
+        error: 'MATERIAL_NOT_FOUND',
+        message: 'Study material not found.',
+      });
+      return;
+    }
+
+    const chunks = await documentRepository.getChunksByMaterial(id, studentId);
+    const sanitizedChunks = chunks.map((c) => ({
+      id: c.id,
+      sectionId: c.section_id,
+      chunkIndex: c.chunk_index,
+      text: c.text,
+      pageStart: c.page_start,
+      pageEnd: c.page_end,
+      characterCount: c.character_count,
+      tokenEstimate: c.token_estimate,
+    }));
+
+    res.json({
+      materialId: id,
+      chunks: sanitizedChunks,
+      total: sanitizedChunks.length,
+    });
+  } catch (err: any) {
+    console.error('[Material Routes] GET /api/materials/:id/chunks error:', err);
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: err.message || 'Failed to retrieve document chunks.',
     });
   }
 });

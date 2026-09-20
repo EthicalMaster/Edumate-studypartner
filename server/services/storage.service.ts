@@ -15,6 +15,7 @@ export interface StorageSaveResult {
 export interface IStorageService {
   save(buffer: Buffer, originalFilename: string, mimeType: string): Promise<StorageSaveResult>;
   get(storageKey: string): Promise<Buffer | null>;
+  load(storageKey: string): Promise<Buffer | null>;
   getStream(storageKey: string): fs.ReadStream | null;
   delete(storageKey: string): Promise<boolean>;
   exists(storageKey: string): Promise<boolean>;
@@ -113,6 +114,13 @@ export class LocalStorageService implements IStorageService {
       }
       return null;
     }
+  }
+
+  /**
+   * Alias for get to support descriptive pipeline loading.
+   */
+  async load(storageKey: string): Promise<Buffer | null> {
+    return this.get(storageKey);
   }
 
   /**
