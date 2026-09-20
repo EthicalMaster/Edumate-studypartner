@@ -18,6 +18,8 @@ export interface StudyMaterialRecord {
   topic: string;
   processing_status: 'uploaded' | 'processing' | 'ready' | 'failed';
   processing_error: string | null;
+  embedding_status?: 'pending' | 'processing' | 'completed' | 'failed';
+  embedding_error?: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -32,6 +34,8 @@ export interface StudyMaterialDTO {
   topic: string;
   processingStatus: 'uploaded' | 'processing' | 'ready' | 'failed';
   processingError?: string | null;
+  embeddingStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+  embeddingError?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -72,6 +76,8 @@ export class MaterialRepository {
       topic: record.topic,
       processingStatus: record.processing_status,
       processingError: record.processing_error || null,
+      embeddingStatus: record.embedding_status || 'pending',
+      embeddingError: record.embedding_error || null,
       createdAt: record.created_at.toISOString(),
       updatedAt: record.updated_at.toISOString(),
     };

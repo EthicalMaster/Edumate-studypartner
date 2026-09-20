@@ -12,6 +12,10 @@ import { materialRepository } from '../repositories/material.repository.js';
 import { storageService } from '../services/storage.service.js';
 import { documentProcessingService } from '../services/document-intelligence/processing.service.js';
 import { documentRepository } from '../repositories/document.repository.js';
+import { quotaService } from '../services/governance/quota.service.js';
+import { embeddingQueueService } from '../services/embedding/embedding-queue.service.js';
+import { vectorRepository } from '../repositories/vector/qdrant.repository.js';
+import { embeddingRepository } from '../repositories/embedding.repository.js';
 
 export const materialRouter = express.Router();
 
@@ -182,6 +186,20 @@ materialRouter.post(
         return;
       }
 
+      // Quota verification (storage quota and max active materials)
+      const quotaCheck = await quotaService.checkUploadQuota(studentId, file.size);
+      if (!quotaCheck.allowed) {
+        res.status(400).json({
+          error: quotaCheck.error,
+          message: quotaCheck.message,
+          currentUsage: quotaCheck.currentUsage,
+          quota: quotaCheck.quota,
+          requestedSize: quotaCheck.requestedSize,
+          remainingSpace: quotaCheck.remainingSpace,
+        });
+        return;
+      }
+
       // Save file safely through storage abstraction (isolated collision-free key)
       const saveResult = await storageService.save(file.buffer, originalFilename, contentCheck.normalizedMime);
 
@@ -205,6 +223,13 @@ materialRouter.post(
       try {
         processResult = await documentProcessingService.processMaterial(record.id, studentId);
         finalRecord = (await materialRepository.getMaterialById(record.id, studentId)) || record;
+
+        if (processResult && processResult.chunks.length > 0) {
+          // Bounded embedding worker asynchronously queues vector generation
+          embeddingQueueService.enqueue(record.id, studentId).catch((embErr) => {
+            console.error(`[Embedding Worker] Async embedding failed for ${record.id}:`, embErr);
+          });
+        }
       } catch (_procErr: any) {
         // Status and error are safely recorded in database
         finalRecord = (await materialRepository.getMaterialById(record.id, studentId)) || record;
@@ -375,6 +400,10 @@ materialRouter.delete('/:id', async (req: Request, res: Response): Promise<void>
       await storageService.delete(deletedRecord.storage_key);
     }
 
+    // Clean up Qdrant vector points and embedding metadata
+    await vectorRepository.deleteByMaterialId(id);
+    await embeddingRepository.deleteByMaterialId(id);
+
     res.json({
       success: true,
       message: 'Study material deleted successfully.',
@@ -413,6 +442,13 @@ materialRouter.post('/:id/process', async (req: Request, res: Response): Promise
 
     const processResult = await documentProcessingService.processMaterial(id, studentId);
     const updatedRecord = await materialRepository.getMaterialById(id, studentId);
+
+    if (processResult && processResult.chunks.length > 0) {
+      // Re-trigger embedding generation asynchronously
+      embeddingQueueService.enqueue(id, studentId).catch((embErr) => {
+        console.error(`[Embedding Worker] Async re-embedding failed for ${id}:`, embErr);
+      });
+    }
 
     res.json({
       success: true,

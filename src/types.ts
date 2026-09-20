@@ -37,8 +37,70 @@ export interface StudyMaterial {
   topic: string;
   processingStatus: 'uploaded' | 'processing' | 'ready' | 'failed';
   processingError?: string | null;
+  embeddingStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+  embeddingError?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface RetrievedChunkResult {
+  chunkId: string;
+  materialId: string;
+  score: number;
+  text: string;
+  materialTitle: string;
+  subject: string;
+  topic: string;
+  pageStart: number;
+  pageEnd: number;
+  sectionId: string | null;
+  sectionTitle: string | null;
+  sectionType: string | null;
+  headingLevel: number | null;
+  chunkIndex: number;
+}
+
+export interface RetrievalSearchResponse {
+  results: RetrievedChunkResult[];
+  totalRetrieved: number;
+  query: string;
+  topK: number;
+  remainingSearchesToday: number;
+}
+
+export interface StudentQuotaUsage {
+  storage: {
+    usedBytes: number;
+    quotaBytes: number;
+    usedFormatted: string;
+    quotaFormatted: string;
+    percentage: number;
+  };
+  materials: {
+    currentCount: number;
+    maxCount: number;
+  };
+  chunks: {
+    currentCount: number;
+    maxCount: number;
+  };
+  searches: {
+    usedToday: number;
+    maxDaily: number;
+    remainingToday: number;
+  };
+}
+
+export interface MaterialEmbeddingSummary {
+  materialId: string;
+  embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+  embeddingError: string | null;
+  totalChunks: number;
+  completedChunks: number;
+  failedChunks: number;
+  model: string;
+  dimension: number;
+  isFallback?: boolean;
 }
 
 export interface DocumentPage {

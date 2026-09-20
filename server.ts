@@ -12,6 +12,7 @@ import { authRouter } from './server/routes/auth.routes.js';
 import { quizRouter } from './server/routes/quiz.routes.js';
 import { leaderboardRouter } from './server/routes/leaderboard.routes.js';
 import { materialRouter } from './server/routes/material.routes.js';
+import { retrievalRouter } from './server/routes/retrieval.routes.js';
 import { checkConnection } from './server/db/connection.js';
 
 // Server entry point
@@ -43,6 +44,13 @@ async function startServer() {
 
   // Mount Study Materials Router
   app.use('/api/materials', materialRouter);
+
+  // Mount Retrieval & Resource Governance Router
+  app.use('/api/retrieval', retrievalRouter);
+  app.use('/api/quotas', (req, res, next) => {
+    req.url = '/quotas';
+    retrievalRouter(req, res, next);
+  });
 
   // Mount Quiz Router (handles /api/quizzes, /api/quiz-sessions, /api/quiz-results, /api/quiz-history)
   app.use('/api/quizzes', quizRouter);

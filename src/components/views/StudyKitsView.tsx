@@ -4,8 +4,9 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { StudyKit, ActiveNavTab, StudyMaterial } from '../../types';
+import { StudyKit, ActiveNavTab, StudyMaterial, StudentQuotaUsage } from '../../types';
 import { materialApi } from '../../services/materialApi';
+import { retrievalApi } from '../../services/retrievalApi';
 import { DocumentInspectModal } from '../DocumentInspectModal';
 
 interface StudyKitsViewProps {
@@ -35,7 +36,9 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
   const [materialToDelete, setMaterialToDelete] = useState<StudyMaterial | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [inspectingMaterial, setInspectingMaterial] = useState<StudyMaterial | null>(null);
+  const [inspectInitialTab, setInspectInitialTab] = useState<'sections' | 'chunks' | 'embeddings'>('sections');
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+  const [quotaUsage, setQuotaUsage] = useState<StudentQuotaUsage | null>(null);
 
   // Filters for Materials
   const [selectedSubject, setSelectedSubject] = useState<string>('All');
@@ -44,13 +47,19 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
 
   const subjects = ['All', 'Physics', 'Mathematics', 'Chemistry', 'Computer Science', 'General Studies'];
 
-  // Load Real Materials
+  // Load Real Materials & Quotas
   const fetchMaterials = useCallback(async () => {
     setIsLoadingMaterials(true);
     setMaterialsError(null);
     try {
-      const res = await materialApi.getMaterials();
-      setMaterials(res.materials || []);
+      const [matRes, quotaRes] = await Promise.all([
+        materialApi.getMaterials(),
+        retrievalApi.getQuotas().catch(() => ({ usage: null })),
+      ]);
+      setMaterials(matRes.materials || []);
+      if (quotaRes && quotaRes.usage) {
+        setQuotaUsage(quotaRes.usage);
+      }
     } catch (err: any) {
       console.error('Failed to load materials:', err);
       setMaterialsError(err.message || 'Could not load your study materials.');
@@ -244,6 +253,90 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
       {/* ========================================================================= */}
       {activeSubTab === 'materials' && (
         <div className="space-y-4">
+          {/* Resource Governance & Quotas Banner */}
+          {quotaUsage && (
+            <div className="bg-white border border-[#c5c6ce]/30 rounded-2xl p-4 shadow-xs space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[12px]">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px] text-[#0051d5]">shield</span>
+                  <span className="font-bold text-[#0b1c30]">Resource Governance & Student Quotas</span>
+                </div>
+                <span className="text-[#75777e] text-[11.5px]">
+                  RTX 3050 & 16GB RAM Architecture Guardrails Active
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[12px]">
+                {/* Storage Quota */}
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#75777e] text-[11px] font-medium">Vault Storage</span>
+                    <span className="font-bold text-[#0b1c30]">
+                      {quotaUsage.storage.usedFormatted} / {quotaUsage.storage.quotaFormatted}
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        quotaUsage.storage.percentage > 85
+                          ? 'bg-rose-500'
+                          : quotaUsage.storage.percentage > 60
+                          ? 'bg-amber-500'
+                          : 'bg-[#0051d5]'
+                      }`}
+                      style={{ width: `${Math.max(2, quotaUsage.storage.percentage)}%` }}
+                    />
+                  </div>
+                  <span className="text-[10.5px] text-[#75777e] block">
+                    {quotaUsage.storage.percentage}% used (25 MB max per file)
+                  </span>
+                </div>
+
+                {/* Materials Count */}
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#75777e] text-[11px] font-medium">Active Materials</span>
+                    <span className="font-bold text-[#0b1c30]">
+                      {quotaUsage.materials.currentCount} / {quotaUsage.materials.maxCount}
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-600 rounded-full transition-all duration-300"
+                      style={{
+                        width: `${Math.min(100, (quotaUsage.materials.currentCount / quotaUsage.materials.maxCount) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-[10.5px] text-[#75777e] block">
+                    {quotaUsage.chunks.currentCount} total knowledge chunks indexed
+                  </span>
+                </div>
+
+                {/* Search Rate Limit */}
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#75777e] text-[11px] font-medium">Daily Vector Searches</span>
+                    <span className="font-bold text-[#0051d5]">
+                      {quotaUsage.searches.remainingToday} / {quotaUsage.searches.maxDaily} left
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-purple-600 rounded-full transition-all duration-300"
+                      style={{
+                        width: `${Math.min(100, ((quotaUsage.searches.maxDaily - quotaUsage.searches.remainingToday) / quotaUsage.searches.maxDaily) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-[10.5px] text-[#75777e] block">
+                    {quotaUsage.searches.usedToday} searches performed today (resets at 00:00 UTC)
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Quick Metrics & Architecture Notice */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 border border-[#c5c6ce]/40 px-4 py-3 rounded-2xl text-[12px] text-[#44474d]">
             <div className="flex items-center gap-4">
@@ -257,7 +350,7 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
             </div>
             <div className="flex items-center gap-2">
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-              <span>PostgreSQL & Storage Boundary Isolated</span>
+              <span>Tenant-Isolated Semantic Vector Retrieval Active</span>
               <button
                 onClick={fetchMaterials}
                 title="Refresh library"
@@ -339,36 +432,61 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
                   >
                     <div>
                       {/* Top Row: Subject & Processing Status */}
-                      <div className="flex items-center justify-between mb-3">
+                      <div className="flex flex-wrap items-center justify-between gap-1.5 mb-3">
                         <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#eff4ff] text-[#0051d5]">
                           {mat.subject}
                         </span>
 
-                        {/* Status Badge */}
-                        {mat.processingStatus === 'ready' && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span className="material-symbols-outlined text-[14px]">check_circle</span>
-                            <span>Ready</span>
-                          </span>
-                        )}
-                        {mat.processingStatus === 'uploaded' && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                            <span className="material-symbols-outlined text-[14px]">cloud_done</span>
-                            <span>Uploaded</span>
-                          </span>
-                        )}
-                        {mat.processingStatus === 'processing' && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                            <span className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></span>
-                            <span>Processing</span>
-                          </span>
-                        )}
-                        {mat.processingStatus === 'failed' && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
-                            <span className="material-symbols-outlined text-[14px]">warning</span>
-                            <span>Failed</span>
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1.5">
+                          {/* Vector Status Badge */}
+                          {mat.embeddingStatus === 'completed' && (
+                            <span
+                              className="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200"
+                              title="BAAI/bge-small-en-v1.5 384d vectors indexed"
+                            >
+                              <span className="material-symbols-outlined text-[13px]">hub</span>
+                              <span>Vectors Ready</span>
+                            </span>
+                          )}
+                          {mat.embeddingStatus === 'processing' && (
+                            <span className="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">
+                              <span className="w-2 h-2 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></span>
+                              <span>Embedding</span>
+                            </span>
+                          )}
+                          {mat.embeddingStatus === 'failed' && (
+                            <span className="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                              <span className="material-symbols-outlined text-[13px]">error</span>
+                              <span>Embed Failed</span>
+                            </span>
+                          )}
+
+                          {/* Processing Status Badge */}
+                          {mat.processingStatus === 'ready' && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                              <span>Ready</span>
+                            </span>
+                          )}
+                          {mat.processingStatus === 'uploaded' && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                              <span className="material-symbols-outlined text-[14px]">cloud_done</span>
+                              <span>Uploaded</span>
+                            </span>
+                          )}
+                          {mat.processingStatus === 'processing' && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                              <span className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></span>
+                              <span>Processing</span>
+                            </span>
+                          )}
+                          {mat.processingStatus === 'failed' && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                              <span className="material-symbols-outlined text-[14px]">warning</span>
+                              <span>Failed</span>
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Header with Icon & Title */}
@@ -461,14 +579,30 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
                         </a>
 
                         {mat.processingStatus === 'ready' && (
-                          <button
-                            onClick={() => setInspectingMaterial(mat)}
-                            className="inline-flex items-center gap-1 text-[12px] font-bold text-emerald-700 hover:text-emerald-800 p-1.5 rounded-lg hover:bg-emerald-50 transition-colors cursor-pointer"
-                            title="Inspect extracted outline and chunks"
-                          >
-                            <span className="material-symbols-outlined text-[17px]">schema</span>
-                            <span>Inspect</span>
-                          </button>
+                          <>
+                            <button
+                              onClick={() => {
+                                setInspectInitialTab('sections');
+                                setInspectingMaterial(mat);
+                              }}
+                              className="inline-flex items-center gap-1 text-[12px] font-bold text-emerald-700 hover:text-emerald-800 p-1.5 rounded-lg hover:bg-emerald-50 transition-colors cursor-pointer"
+                              title="Inspect extracted outline and chunks"
+                            >
+                              <span className="material-symbols-outlined text-[17px]">schema</span>
+                              <span>Inspect</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setInspectInitialTab('embeddings');
+                                setInspectingMaterial(mat);
+                              }}
+                              className="inline-flex items-center gap-1 text-[12px] font-bold text-purple-700 hover:text-purple-800 p-1.5 rounded-lg hover:bg-purple-50 transition-colors cursor-pointer"
+                              title="Inspect vectors and test semantic search"
+                            >
+                              <span className="material-symbols-outlined text-[17px]">hub</span>
+                              <span>Retrieval</span>
+                            </button>
+                          </>
                         )}
                       </div>
 
@@ -622,10 +756,11 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
         </div>
       )}
 
-      {/* Phase 6: Document Intelligence Inspection Modal */}
+      {/* Phase 6 & 7: Document Intelligence & Retrieval Inspection Modal */}
       <DocumentInspectModal
         isOpen={Boolean(inspectingMaterial)}
         material={inspectingMaterial}
+        initialTab={inspectInitialTab}
         onClose={() => setInspectingMaterial(null)}
         onReprocessSuccess={fetchMaterials}
       />

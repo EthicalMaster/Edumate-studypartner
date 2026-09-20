@@ -212,6 +212,105 @@ export class DocumentRepository {
       updatedAt: mat.updated_at ? new Date(mat.updated_at).toISOString() : new Date().toISOString(),
     };
   }
+
+  /**
+   * Retrieves a single chunk joined with its section hierarchy and parent material metadata,
+   * strictly enforcing student ownership.
+   */
+  async getChunkWithMetadata(chunkId: string, studentId: string) {
+    const pool = getRequiredPool();
+    const query = `
+      SELECT 
+        c.id as chunk_id,
+        c.material_id,
+        c.chunk_index,
+        c.text,
+        c.page_start,
+        c.page_end,
+        c.character_count,
+        c.token_estimate,
+        c.section_id,
+        s.title as section_title,
+        s.section_type,
+        s.heading_level,
+        m.title as material_title,
+        m.subject,
+        m.topic
+      FROM document_chunks c
+      JOIN study_materials m ON c.material_id = m.id
+      LEFT JOIN document_sections s ON c.section_id = s.id
+      WHERE c.id = $1 AND m.student_id = $2;
+    `;
+    const res = await pool.query(query, [chunkId, studentId]);
+    if (res.rows.length === 0) return null;
+    const r = res.rows[0];
+    return {
+      chunkId: r.chunk_id,
+      materialId: r.material_id,
+      chunkIndex: r.chunk_index,
+      text: r.text,
+      pageStart: r.page_start,
+      pageEnd: r.page_end,
+      characterCount: r.character_count,
+      tokenEstimate: r.token_estimate,
+      sectionId: r.section_id,
+      sectionTitle: r.section_title || null,
+      sectionType: r.section_type || null,
+      headingLevel: r.heading_level || null,
+      materialTitle: r.material_title,
+      subject: r.subject,
+      topic: r.topic,
+    };
+  }
+
+  /**
+   * Retrieves multiple chunks joined with metadata in a single query,
+   * strictly scoped to studentId.
+   */
+  async getChunksByIdsWithMetadata(chunkIds: string[], studentId: string) {
+    if (chunkIds.length === 0) return [];
+    const pool = getRequiredPool();
+    const query = `
+      SELECT 
+        c.id as chunk_id,
+        c.material_id,
+        c.chunk_index,
+        c.text,
+        c.page_start,
+        c.page_end,
+        c.character_count,
+        c.token_estimate,
+        c.section_id,
+        s.title as section_title,
+        s.section_type,
+        s.heading_level,
+        m.title as material_title,
+        m.subject,
+        m.topic
+      FROM document_chunks c
+      JOIN study_materials m ON c.material_id = m.id
+      LEFT JOIN document_sections s ON c.section_id = s.id
+      WHERE c.id = ANY($1::uuid[]) AND m.student_id = $2;
+    `;
+    const res = await pool.query(query, [chunkIds, studentId]);
+    return res.rows.map((r) => ({
+      chunkId: r.chunk_id,
+      materialId: r.material_id,
+      chunkIndex: r.chunk_index,
+      text: r.text,
+      pageStart: r.page_start,
+      pageEnd: r.page_end,
+      characterCount: r.character_count,
+      tokenEstimate: r.token_estimate,
+      sectionId: r.section_id,
+      sectionTitle: r.section_title || null,
+      sectionType: r.section_type || null,
+      headingLevel: r.heading_level || null,
+      materialTitle: r.material_title,
+      subject: r.subject,
+      topic: r.topic,
+    }));
+  }
 }
 
 export const documentRepository = new DocumentRepository();
