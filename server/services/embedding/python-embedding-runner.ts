@@ -115,6 +115,7 @@ export class PythonEmbeddingRunner {
   private isHealthy = false;
   private healthCheckPromise: Promise<RunnerHealthInfo> | null = null;
   private lastHealthCheckTime = 0;
+  private lifecycleGeneration = 0;
 
   private device: 'cuda' | 'cpu' = 'cpu';
   private modelName = 'BAAI/bge-small-en-v1.5';
@@ -201,12 +202,15 @@ export class PythonEmbeddingRunner {
   }
 
   private executeDeviceProbe(): Promise<RunnerHealthInfo> {
+    const probeGeneration = this.lifecycleGeneration;
     return new Promise((resolve) => {
       const pythonExe = this.getPythonPath();
       const scriptPath = this.getScriptPath();
 
       if (!fs.existsSync(scriptPath)) {
-        this.isHealthy = false;
+        if (this.lifecycleGeneration === probeGeneration) {
+          this.isHealthy = false;
+        }
         return resolve({
           isHealthy: false,
           device: 'cpu',
@@ -289,23 +293,27 @@ export class PythonEmbeddingRunner {
           if (code === 0 && stdout.trim()) {
             try {
               const res = JSON.parse(stdout.trim());
-              this.device = res.device === 'cuda' ? 'cuda' : 'cpu';
-              this.modelName = res.model || this.modelName;
-              this.dimension = res.dimension || this.dimension;
-              this.isHealthy = true;
+              if (this.lifecycleGeneration === probeGeneration) {
+                this.device = res.device === 'cuda' ? 'cuda' : 'cpu';
+                this.modelName = res.model || this.modelName;
+                this.dimension = res.dimension || this.dimension;
+                this.isHealthy = true;
 
-              console.log(
-                `[PythonEmbeddingRunner] Real BGE engine verified: python="${pythonExe}", model="${this.modelName}", device="${this.device}"`
-              );
+                console.log(
+                  `[PythonEmbeddingRunner] Real BGE engine verified: python="${pythonExe}", model="${this.modelName}", device="${this.device}"`
+                );
+              }
 
               return resolve({
-                isHealthy: true,
-                device: this.device,
-                model: this.modelName,
-                dimension: this.dimension,
+                isHealthy: this.lifecycleGeneration === probeGeneration,
+                device: res.device === 'cuda' ? 'cuda' : 'cpu',
+                model: res.model || this.modelName,
+                dimension: res.dimension || this.dimension,
               });
             } catch (parseErr: any) {
-              this.isHealthy = false;
+              if (this.lifecycleGeneration === probeGeneration) {
+                this.isHealthy = false;
+              }
               return resolve({
                 isHealthy: false,
                 device: 'cpu',
@@ -316,7 +324,9 @@ export class PythonEmbeddingRunner {
             }
           }
 
-          this.isHealthy = false;
+          if (this.lifecycleGeneration === probeGeneration) {
+            this.isHealthy = false;
+          }
           const errMsg = (stderr || stdout).trim() || `Process exited with code ${code}`;
           return resolve({
             isHealthy: false,
@@ -383,6 +393,11 @@ export class PythonEmbeddingRunner {
     return new Promise((resolve, reject) => {
       const pythonExe = this.getPythonPath();
       const scriptPath = this.getScriptPath();
+
+      if (!fs.existsSync(scriptPath)) {
+        this.isHealthy = false;
+        return reject(new Error(`Python embedder script not found at ${scriptPath}`));
+      }
 
       console.log(
         `[PythonEmbeddingRunner] Launching long-lived embedder process: python="${pythonExe}", script="${scriptPath}"`
@@ -633,9 +648,31 @@ export class PythonEmbeddingRunner {
   public async restart(): Promise<void> {
     console.log('[PythonEmbeddingRunner] Restart requested.');
     this.shutdown();
+    const generation = ++this.lifecycleGeneration;
+
     await this.checkHealth(true);
+    if (this.lifecycleGeneration !== generation) {
+      console.log('[PythonEmbeddingRunner] Restart cancelled: lifecycle invalidated during health check.');
+      return;
+    }
+
     if (this.isHealthy) {
-      await this.ensureProcess();
+      if (this.lifecycleGeneration !== generation) {
+        return;
+      }
+      try {
+        await this.ensureProcess();
+      } catch (err) {
+        if (this.lifecycleGeneration !== generation) {
+          console.log('[PythonEmbeddingRunner] Startup error suppressed: lifecycle invalidated during restart.');
+          return;
+        }
+        throw err;
+      }
+      if (this.lifecycleGeneration !== generation) {
+        console.log('[PythonEmbeddingRunner] Restart post-startup aborted: runner lifecycle invalidated.');
+        return;
+      }
     }
   }
 
@@ -643,6 +680,9 @@ export class PythonEmbeddingRunner {
    * Graceful shutdown of the Python runner process.
    */
   public shutdown(): void {
+    // Invalidate any in-flight restart, probe, or startup operations
+    this.lifecycleGeneration++;
+
     if (this.process) {
       console.log('[PythonEmbeddingRunner] Shutting down Python embedder process...');
       const proc = this.process;

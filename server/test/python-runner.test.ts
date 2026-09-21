@@ -469,6 +469,58 @@ if __name__ == "__main__":
       assert.strictEqual(recovered[0].length, 384);
     });
 
+    await test('Stale asynchronous restart is cancelled by shutdown and does not spawn deleted script', async () => {
+      const raceScriptPath = path.resolve(process.cwd(), 'temp-race-mock-embedder.py');
+      // Create a mock script that introduces a slight delay in device probe
+      const slowProbeScript = `
+import sys
+import json
+import time
+
+if len(sys.argv) > 1 and sys.argv[1] == "--device":
+    time.sleep(0.3)
+    print(json.dumps({"device": "cuda", "model": "BAAI/bge-small-en-v1.5", "dimension": 384}))
+    sys.stdout.flush()
+    sys.exit(0)
+
+print(json.dumps({"ready": True, "device": "cuda", "model": "BAAI/bge-small-en-v1.5", "dimension": 384}))
+sys.stdout.flush()
+for line in sys.stdin:
+    pass
+`;
+      fs.writeFileSync(raceScriptPath, slowProbeScript, 'utf8');
+
+      const originalGetScriptPath = (runner as any).getScriptPath;
+      (runner as any).getScriptPath = () => raceScriptPath;
+
+      try {
+        // 1. Start a restart operation
+        const restartPromise = runner.restart();
+
+        // 2. Shutdown the runner before the asynchronous restart reaches ensureProcess()
+        runner.shutdown();
+
+        // 3. Delete the mock script while restart is still in-flight
+        fs.unlinkSync(raceScriptPath);
+
+        // 4. Await the restart operation - it must exit cleanly without attempting to spawn the deleted script
+        await restartPromise;
+
+        // 5. Verify the stale restart did not spawn or mark healthy
+        assert.strictEqual(runner.isAvailable(), false, 'Runner must not be marked healthy after stale restart');
+        assert.strictEqual((runner as any).process, null, 'No child process should be active');
+      } finally {
+        (runner as any).getScriptPath = originalGetScriptPath;
+        if (fs.existsSync(raceScriptPath)) {
+          try {
+            fs.unlinkSync(raceScriptPath);
+          } catch {
+            // Ignore
+          }
+        }
+      }
+    });
+
     // Clean up mock script
     runner.shutdown();
   } finally {
