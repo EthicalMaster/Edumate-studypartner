@@ -43,6 +43,9 @@ export interface StudentQuotaUsage {
 
 export class QuotaService {
   private config: ResourceQuotaConfig;
+  private activeGlobalAiRequests = 0;
+  private activeStudentAiRequests = new Map<string, number>();
+  private inMemoryDailyAiCounts = new Map<string, { date: string; count: number }>();
 
   constructor(customConfig?: Partial<ResourceQuotaConfig>) {
     this.config = { ...DEFAULT_RESOURCE_QUOTAS, ...customConfig };
@@ -322,6 +325,157 @@ export class QuotaService {
       return this.config.defaultRetrievalTopK;
     }
     return Math.min(Math.max(1, Math.floor(requestedTopK)), this.config.maxRetrievalTopK);
+  }
+
+  // ==========================================================================
+  // Phase 8: AI Resource Governance (Concurrency & Quota Management)
+  // ==========================================================================
+
+  /**
+   * Acquires a concurrent AI request slot globally and for the specific student.
+   * Enforces maxGlobalConcurrentAiRequests and maxConcurrentAiRequestsPerStudent.
+   */
+  public acquireAiConcurrencySlot(studentId: string): { allowed: boolean; error?: string; message?: string } {
+    if (this.activeGlobalAiRequests >= this.config.maxGlobalConcurrentAiRequests) {
+      return {
+        allowed: false,
+        error: 'GLOBAL_CONCURRENCY_EXCEEDED',
+        message: 'The AI service is currently handling peak global capacity. Please retry shortly.',
+      };
+    }
+
+    const currentStudent = this.activeStudentAiRequests.get(studentId) || 0;
+    if (currentStudent >= this.config.maxConcurrentAiRequestsPerStudent) {
+      return {
+        allowed: false,
+        error: 'STUDENT_CONCURRENCY_EXCEEDED',
+        message: `You have reached your maximum of ${this.config.maxConcurrentAiRequestsPerStudent} concurrent AI requests. Please wait for previous requests to complete.`,
+      };
+    }
+
+    this.activeGlobalAiRequests++;
+    this.activeStudentAiRequests.set(studentId, currentStudent + 1);
+
+    return { allowed: true };
+  }
+
+  /**
+   * Releases an acquired AI concurrency slot.
+   */
+  public releaseAiConcurrencySlot(studentId: string): void {
+    this.activeGlobalAiRequests = Math.max(0, this.activeGlobalAiRequests - 1);
+    const curr = this.activeStudentAiRequests.get(studentId) || 0;
+    if (curr <= 1) {
+      this.activeStudentAiRequests.delete(studentId);
+    } else {
+      this.activeStudentAiRequests.set(studentId, curr - 1);
+    }
+  }
+
+  /**
+   * Returns current active AI concurrency statistics.
+   */
+  public getActiveAiConcurrency(studentId?: string): { global: number; student: number } {
+    return {
+      global: this.activeGlobalAiRequests,
+      student: studentId ? (this.activeStudentAiRequests.get(studentId) || 0) : 0,
+    };
+  }
+
+  /**
+   * Enforces and atomically increments daily AI request quota (default: 100 requests/student/day).
+   */
+  public async checkAndIncrementAiQuota(studentId: string): Promise<QuotaCheckResult> {
+    const maxDaily = this.config.maxDailyAiRequestsPerStudent;
+    const pool = getPool();
+
+    if (pool) {
+      try {
+        const res = await pool.query<{ request_count: number }>(
+          `INSERT INTO student_ai_quotas (student_id, request_date, request_count)
+           VALUES ($1, CURRENT_DATE, 1)
+           ON CONFLICT (student_id, request_date)
+           DO UPDATE SET request_count = student_ai_quotas.request_count + 1, updated_at = NOW()
+           RETURNING request_count`,
+          [studentId]
+        );
+
+        const newCount = res.rows[0]?.request_count || 1;
+        if (newCount > maxDaily) {
+          return {
+            allowed: false,
+            error: 'AI_QUOTA_EXCEEDED',
+            limit: maxDaily,
+            remaining: 0,
+            message: `You have reached your daily limit of ${maxDaily} AI requests. Quota resets tomorrow.`,
+          };
+        }
+
+        return {
+          allowed: true,
+          limit: maxDaily,
+          remaining: Math.max(0, maxDaily - newCount),
+        };
+      } catch {
+        // Fallback to in-memory tracking if table doesn't exist yet or connection transiently fails
+      }
+    }
+
+    // In-memory fallback
+    const today = new Date().toISOString().slice(0, 10);
+    const existing = this.inMemoryDailyAiCounts.get(studentId);
+
+    let count = 1;
+    if (existing && existing.date === today) {
+      count = existing.count + 1;
+    }
+    this.inMemoryDailyAiCounts.set(studentId, { date: today, count });
+
+    if (count > maxDaily) {
+      return {
+        allowed: false,
+        error: 'AI_QUOTA_EXCEEDED',
+        limit: maxDaily,
+        remaining: 0,
+        message: `You have reached your daily limit of ${maxDaily} AI requests. Quota resets tomorrow.`,
+      };
+    }
+
+    return {
+      allowed: true,
+      limit: maxDaily,
+      remaining: Math.max(0, maxDaily - count),
+    };
+  }
+
+  /**
+   * Validates AI request input size and sanitizes requested output tokens against governance bounds.
+   */
+  public validateAiInput(
+    inputCharCount: number,
+    requestedOutputTokens?: number
+  ): { allowed: boolean; error?: string; message?: string; sanitizedOutputTokens: number } {
+    const maxInput = this.config.maxInputCharsPerRequest;
+    const maxOutput = this.config.maxOutputTokensPerRequest;
+
+    if (inputCharCount > maxInput) {
+      return {
+        allowed: false,
+        error: 'INPUT_TOO_LARGE',
+        message: `Input character count (${inputCharCount}) exceeds the maximum limit of ${maxInput} characters.`,
+        sanitizedOutputTokens: maxOutput,
+      };
+    }
+
+    let sanitized = maxOutput;
+    if (typeof requestedOutputTokens === 'number' && requestedOutputTokens > 0) {
+      sanitized = Math.min(Math.floor(requestedOutputTokens), maxOutput);
+    }
+
+    return {
+      allowed: true,
+      sanitizedOutputTokens: sanitized,
+    };
   }
 }
 

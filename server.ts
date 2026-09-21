@@ -13,6 +13,7 @@ import { quizRouter } from './server/routes/quiz.routes.js';
 import { leaderboardRouter } from './server/routes/leaderboard.routes.js';
 import { materialRouter } from './server/routes/material.routes.js';
 import { retrievalRouter } from './server/routes/retrieval.routes.js';
+import { aiRouter } from './server/routes/ai.routes.js';
 import { checkConnection } from './server/db/connection.js';
 
 // Server entry point
@@ -36,6 +37,32 @@ async function startServer() {
     });
   });
 
+  // Explicit download endpoints for verified Phase 7 embedding files
+  app.get('/download/python-embedding-runner.ts', (_req, res) => {
+    const filePath = path.resolve(process.cwd(), 'server', 'services', 'embedding', 'python-embedding-runner.ts');
+    res.download(filePath, 'python-embedding-runner.ts');
+  });
+
+  app.get('/download/embedder.py', (_req, res) => {
+    const filePath = path.resolve(process.cwd(), 'server', 'services', 'embedding', 'embedder.py');
+    res.download(filePath, 'embedder.py');
+  });
+
+  app.get('/download/python-runner.test.ts', (_req, res) => {
+    const filePath = path.resolve(process.cwd(), 'server', 'test', 'python-runner.test.ts');
+    res.download(filePath, 'python-runner.test.ts');
+  });
+
+  app.get('/download/env.example', (_req, res) => {
+    const filePath = path.resolve(process.cwd(), '.env.example');
+    res.download(filePath, '.env.example', { dotfiles: 'allow' });
+  });
+
+  app.get('/download/.env.example', (_req, res) => {
+    const filePath = path.resolve(process.cwd(), '.env.example');
+    res.download(filePath, '.env.example', { dotfiles: 'allow' });
+  });
+
   // Mount Authentication Router
   app.use('/api/auth', authRouter);
 
@@ -51,6 +78,9 @@ async function startServer() {
     req.url = '/quotas';
     retrievalRouter(req, res, next);
   });
+
+  // Mount AI Gateway Router (Phase 8)
+  app.use('/api/ai', aiRouter);
 
   // Mount Quiz Router (handles /api/quizzes, /api/quiz-sessions, /api/quiz-results, /api/quiz-history)
   app.use('/api/quizzes', quizRouter);
