@@ -374,10 +374,11 @@ export class ScoringService {
 
       // 8. Log student activity
       await client.query(
-        `INSERT INTO student_activity (student_id, activity_type, metadata)
-         VALUES ($1, 'quiz_completed', $2)`,
+        `INSERT INTO student_activity (student_id, activity_type, duration_seconds, metadata)
+         VALUES ($1, 'quiz_completed', $2, $3)`,
         [
           studentId,
+          timeTakenSeconds,
           JSON.stringify({
             session_id: sessionId,
             quiz_id: session.quiz_id,

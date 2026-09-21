@@ -17,6 +17,7 @@ import { QuizPaperPreview } from '../quiz/QuizPaperPreview';
 import { ActiveQuizView } from '../quiz/ActiveQuizView';
 import { QuizResultsView } from '../quiz/QuizResultsView';
 import { QuizHistoryView } from '../quiz/QuizHistoryView';
+import { useStudySession } from '../../hooks/useStudySession';
 
 interface QuizzesViewProps {
   quizQuestions?: any[];
@@ -31,6 +32,7 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({
   onNavigate,
   onRecordQuizCompletion,
 }) => {
+  useStudySession();
   const [screen, setScreen] = useState<ViewScreen>('home');
   const [activeTab, setActiveTab] = useState<'all' | 'PRACTICE' | 'EXAM' | 'history'>('all');
 

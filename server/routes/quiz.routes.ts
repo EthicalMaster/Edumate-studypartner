@@ -15,6 +15,7 @@ import {
 import { quizRepository } from '../repositories/quiz.repository.js';
 import { quizSessionRepository } from '../repositories/quiz_session.repository.js';
 import { scoringService } from '../services/scoring.service.js';
+import { analyticsRepository } from '../repositories/analytics.repository.js';
 
 export const quizRouter = Router();
 
@@ -201,6 +202,13 @@ quizRouter.post('/sessions', validateBody(createQuizSessionSchema), async (req: 
   try {
     const studentId = getStudentProfileId(req);
     const session = await quizSessionRepository.createSession(studentId, req.body.quiz_id);
+    
+    // Log quiz_started event
+    analyticsRepository.logActivity(studentId, 'quiz_started', 0, {
+      session_id: session.id,
+      quiz_id: req.body.quiz_id,
+    }).catch((err) => console.error('[Quiz Routes] Failed to log quiz_started:', err));
+
     res.status(201).json({ session });
   } catch (err: any) {
     if (err.message?.startsWith('QUIZ_NOT_FOUND:')) {
@@ -280,6 +288,13 @@ quizRouter.post(
   async (req: Request, res: Response) => {
     try {
       const studentId = getStudentProfileId(req);
+      
+      // Log quiz_submitted event
+      analyticsRepository.logActivity(studentId, 'quiz_submitted', 0, {
+        session_id: req.params.sessionId,
+        submission_reason: req.body.submission_reason,
+      }).catch((err) => console.error('[Quiz Routes] Failed to log quiz_submitted:', err));
+
       const detailedResult = await scoringService.submitAndScoreSession(
         req.params.sessionId,
         studentId,

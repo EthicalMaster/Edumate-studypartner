@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActiveNavTab, StudyKit, WeakTopic } from '../../types';
-import { SUBJECT_MASTERY_STATS } from '../../data/initialData';
 import { useAuth } from '../../context/AuthContext';
+import { analyticsApi, type DashboardResponse, type WeakTopicData } from '../../services/analyticsApi';
+import { useStudySession } from '../../hooks/useStudySession';
 
 interface HomeViewProps {
   onNavigate: (tab: ActiveNavTab) => void;
@@ -21,12 +22,55 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onStartRemedialKit,
   onPlayAudioTrack,
   studyKits,
-  weakTopics,
   onSelectWeakTopic,
 }) => {
   const { user } = useAuth();
   const studentName = user?.profile?.full_name || 'Student';
-  const activeKit = studyKits[0]; // Electrostatics
+
+  // Server-authoritative real-time study session tracking for HomeView
+  useStudySession();
+
+  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadDashboard() {
+      try {
+        setLoading(true);
+        const data = await analyticsApi.getDashboard();
+        if (isMounted) {
+          setDashboard(data);
+          setError(null);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setError(err.message || 'Failed to load dashboard data.');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+    loadDashboard();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const timeOfDayGreeting = dashboard?.greeting.timeOfDay || 'morning';
+  const greetingText = `Good ${timeOfDayGreeting}, ${dashboard?.greeting.name || studentName}`;
+
+  // Subject palette colors
+  const subjectColors = [
+    { dot: 'bg-[#0051d5]', bar: 'bg-[#0051d5]' },
+    { dot: 'bg-emerald-500', bar: 'bg-emerald-500' },
+    { dot: 'bg-indigo-600', bar: 'bg-indigo-600' },
+    { dot: 'bg-amber-500', bar: 'bg-amber-500' },
+    { dot: 'bg-rose-500', bar: 'bg-rose-500' },
+  ];
 
   return (
     <div className="flex flex-col w-full gap-6 pb-12">
@@ -35,7 +79,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <h1 className="text-[24px] font-bold text-[#0b1c30] tracking-tight font-['Inter']">
-              Good morning, {studentName}
+              {greetingText}
             </h1>
             <span aria-label="Waving hand" className="text-2xl select-none" role="img">
               👋
@@ -53,15 +97,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
           <div className="flex flex-col pr-1">
             <span className="text-[11px] text-[#44474d] uppercase font-semibold tracking-wider">
-              Today's Goal
+              Today's Activity
             </span>
             <span className="text-[13px] text-[#0b1c30] font-bold">
-              2 Topics + 1 Quiz
+              {dashboard ? `${dashboard.quizzesCompleted.completedToday} Quizzes Today` : 'Loading...'}
             </span>
           </div>
           <div className="flex items-center gap-1.5 pl-2 py-1 px-2.5 rounded-full bg-[#eff4ff] text-[#0051d5] text-[12px]">
-            <span className="w-2 h-2 rounded-full bg-[#0051d5]"></span>
-            <span className="font-bold">65% Done</span>
+            <span className={`w-2 h-2 rounded-full ${dashboard?.studyStreak.isActiveToday ? 'bg-emerald-500 animate-pulse' : 'bg-[#0051d5]'}`}></span>
+            <span className="font-bold">
+              {dashboard?.studyStreak.isActiveToday ? 'Studied Today' : 'Ready to Study'}
+            </span>
           </div>
         </div>
       </div>
@@ -142,7 +188,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </div>
 
-      {/* Four Key Diagnostic Stat Cards */}
+      {/* Four Key Diagnostic Stat Cards (PostgreSQL Database-Backed) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {/* Stat 1: Overall Score */}
         <div
@@ -150,20 +196,27 @@ export const HomeView: React.FC<HomeViewProps> = ({
           className="bg-white p-4 rounded-2xl shadow-xs border border-[#c5c6ce]/30 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[13px] text-[#44474d] font-semibold">Overall Score</span>
+            <span className="text-[13px] text-[#44474d] font-semibold">Overall Quiz Score</span>
             <div className="w-9 h-9 rounded-xl bg-[#eff4ff] flex items-center justify-center text-[#0051d5]">
               <span className="material-symbols-outlined text-[20px]">donut_large</span>
             </div>
           </div>
           <div className="flex items-baseline gap-2 mt-3">
-            <span className="text-[26px] text-[#0b1c30] font-bold tracking-tight">78%</span>
-            <span className="flex items-center text-emerald-600 text-[12px] font-bold">
-              <span className="material-symbols-outlined text-[14px]">arrow_upward</span>
-              +4% this week
+            <span className="text-[26px] text-[#0b1c30] font-bold tracking-tight">
+              {loading ? '...' : dashboard && dashboard.quizzesCompleted.total > 0 ? `${dashboard.averageQuizPercentage}%` : '—'}
             </span>
+            {dashboard && dashboard.quizzesCompleted.total > 0 && (
+              <span className="flex items-center text-emerald-600 text-[12px] font-bold">
+                <span className="material-symbols-outlined text-[14px]">arrow_upward</span>
+                Avg Accuracy
+              </span>
+            )}
           </div>
           <div className="w-full bg-[#e5eeff] h-1.5 rounded-full mt-3 overflow-hidden">
-            <div className="bg-[#0051d5] h-full rounded-full" style={{ width: '78%' }}></div>
+            <div
+              className="bg-[#0051d5] h-full rounded-full transition-all duration-300"
+              style={{ width: `${dashboard ? Math.min(100, Math.max(5, dashboard.averageQuizPercentage)) : 0}%` }}
+            ></div>
           </div>
         </div>
 
@@ -179,12 +232,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
           </div>
           <div className="flex items-baseline gap-2 mt-3">
-            <span className="text-[26px] text-[#0b1c30] font-bold tracking-tight">12</span>
-            <span className="text-[12px] text-[#44474d] font-medium">+3 completed today</span>
+            <span className="text-[26px] text-[#0b1c30] font-bold tracking-tight">
+              {loading ? '...' : dashboard?.quizzesCompleted.total ?? 0}
+            </span>
+            <span className="text-[12px] text-[#44474d] font-medium">
+              +{dashboard?.quizzesCompleted.completedToday ?? 0} completed today
+            </span>
           </div>
           <div className="flex items-center gap-1 mt-3 text-[12px] text-[#0051d5] font-bold">
             <span className="material-symbols-outlined text-[16px]">stars</span>
-            <span>Top 15% in Cohort</span>
+            <span>{dashboard && dashboard.quizzesCompleted.total > 0 ? 'Active Quiz History' : 'Ready for First Quiz'}</span>
           </div>
         </div>
 
@@ -200,12 +257,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
           </div>
           <div className="flex items-baseline gap-2 mt-3">
-            <span className="text-[26px] text-amber-600 font-bold tracking-tight">4</span>
-            <span className="text-[12px] text-amber-700 font-semibold">2 in Physics</span>
+            <span className="text-[26px] text-amber-600 font-bold tracking-tight">
+              {loading ? '...' : dashboard?.weakTopics.length ?? 0}
+            </span>
+            <span className="text-[12px] text-amber-700 font-semibold">
+              {dashboard && dashboard.weakTopics.length > 0
+                ? `${dashboard.weakTopics[0].subject} Focus`
+                : 'All Proficient'}
+            </span>
           </div>
           <div className="flex items-center gap-1 mt-3 text-[12px] text-[#44474d]">
             <span className="material-symbols-outlined text-[16px] text-amber-600">alarm</span>
-            <span>Adaptive revision queued</span>
+            <span>{dashboard && dashboard.weakTopics.length > 0 ? 'Adaptive revision queued' : 'No Critical Weak Gaps'}</span>
           </div>
         </div>
 
@@ -215,23 +278,30 @@ export const HomeView: React.FC<HomeViewProps> = ({
           className="bg-white p-4 rounded-2xl shadow-xs border border-[#c5c6ce]/30 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[13px] text-[#44474d] font-semibold">Study Time</span>
+            <span className="text-[13px] text-[#44474d] font-semibold">Study Time This Week</span>
             <div className="w-9 h-9 rounded-xl bg-[#e3dfff] flex items-center justify-center text-[#120068]">
               <span className="material-symbols-outlined text-[20px]">timelapse</span>
             </div>
           </div>
           <div className="flex items-baseline gap-2 mt-3">
-            <span className="text-[26px] text-[#0b1c30] font-bold tracking-tight">6h 32m</span>
-            <span className="text-[12px] text-[#44474d] font-medium">Daily avg: 1.5h</span>
+            <span className="text-[26px] text-[#0b1c30] font-bold tracking-tight">
+              {loading ? '...' : dashboard?.studyTimeThisWeek.formatted ?? '0h 0m'}
+            </span>
+            <span className="text-[12px] text-[#44474d] font-medium">
+              Daily avg: {dashboard?.studyTimeThisWeek.dailyAverageHours ?? 0}h
+            </span>
           </div>
           <div className="flex items-center gap-1.5 mt-3">
             <div className="flex gap-1">
-              <span className="w-2 h-2 rounded-full bg-[#0051d5]"></span>
-              <span className="w-2 h-2 rounded-full bg-[#0051d5]"></span>
-              <span className="w-2 h-2 rounded-full bg-[#0051d5]"></span>
-              <span className="w-2 h-2 rounded-full bg-[#dbe1ff]"></span>
+              {[...Array(Math.min(4, Math.max(1, dashboard?.studyStreak.currentStreak || 0)))].map((_, i) => (
+                <span key={i} className="w-2 h-2 rounded-full bg-[#0051d5]"></span>
+              ))}
             </div>
-            <span className="text-[12px] text-[#0051d5] font-bold">Streak Active 🔥</span>
+            <span className="text-[12px] text-[#0051d5] font-bold">
+              {dashboard && dashboard.studyStreak.currentStreak > 0
+                ? `${dashboard.studyStreak.currentStreak} Day Streak 🔥`
+                : 'Start Streak Today'}
+            </span>
           </div>
         </div>
       </div>
@@ -313,7 +383,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <div className="flex items-center justify-between pt-1 text-[12px] text-[#44474d]">
             <span>
               Current pipeline:{' '}
-              <strong className="text-[#0b1c30] font-bold">Physics Chapter 3 Active</strong>
+              <strong className="text-[#0b1c30] font-bold">
+                {dashboard?.continueLearning?.title || 'Interactive Learning Engine Ready'}
+              </strong>
             </span>
             <button
               onClick={() => onNavigate('study-kits')}
@@ -329,50 +401,56 @@ export const HomeView: React.FC<HomeViewProps> = ({
         <div className="lg:col-span-5 bg-white p-5 lg:p-6 rounded-2xl shadow-xs border border-[#c5c6ce]/30 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[17px] font-bold text-[#0b1c30]">Continue Learning</span>
-            <span className="text-[12px] text-[#44474d]">{activeKit.lastStudied}</span>
+            <span className="text-[12px] text-[#44474d]">
+              {dashboard?.continueLearning ? 'Active Session' : 'Ready'}
+            </span>
           </div>
 
-          <div className="p-4 rounded-xl bg-[#eff4ff] flex flex-col gap-2.5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-[#0051d5] flex items-center justify-center text-white shadow-sm">
-                  <span className="material-symbols-outlined text-[22px]">offline_bolt</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[16px] font-bold text-[#0b1c30]">
-                    {activeKit.title}
-                  </span>
-                  <span className="text-[12px] text-[#44474d]">
-                    {activeKit.subject} • {activeKit.unit} • {activeKit.flashcardsCount} Flashcards left
-                  </span>
+          {dashboard?.continueLearning ? (
+            <div className="p-4 rounded-xl bg-[#eff4ff] flex flex-col gap-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-[#0051d5] flex items-center justify-center text-white shadow-sm">
+                    <span className="material-symbols-outlined text-[22px]">
+                      {dashboard.continueLearning.type === 'quiz' ? 'quiz' : 'menu_book'}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[16px] font-bold text-[#0b1c30] line-clamp-1">
+                      {dashboard.continueLearning.title}
+                    </span>
+                    <span className="text-[12px] text-[#44474d]">
+                      {dashboard.continueLearning.subject}
+                      {dashboard.continueLearning.topic ? ` • ${dashboard.continueLearning.topic}` : ''}
+                    </span>
+                  </div>
                 </div>
               </div>
-              <span className="text-[15px] text-[#0051d5] font-bold">{activeKit.progressPercent}%</span>
-            </div>
 
-            {/* Progress Bar */}
-            <div className="w-full bg-[#d3e4fe] h-2 rounded-full overflow-hidden">
-              <div
-                className="bg-[#0051d5] h-full rounded-full transition-all duration-300"
-                style={{ width: `${activeKit.progressPercent}%` }}
-              ></div>
+              <div className="flex items-center justify-between text-[12px] text-[#44474d] pt-0.5">
+                <span>Type: {dashboard.continueLearning.type === 'quiz' ? 'Quiz Attempt' : 'Study Document'}</span>
+                <span className="text-[#0051d5] font-bold">Resume Anytime</span>
+              </div>
             </div>
-
-            <div className="flex items-center justify-between text-[12px] text-[#44474d] pt-0.5">
-              <span>Module: {activeKit.activeModule}</span>
-              <span className="text-[#0051d5] font-bold">
-                {activeKit.keyConceptsLearned} / {activeKit.totalKeyConcepts} Key Concepts
-              </span>
+          ) : (
+            <div className="p-4 rounded-xl bg-[#eff4ff] flex flex-col items-center justify-center text-center py-6">
+              <div className="w-10 h-10 rounded-full bg-[#dbe1ff] text-[#0051d5] flex items-center justify-center mb-2">
+                <span className="material-symbols-outlined text-[22px]">play_circle</span>
+              </div>
+              <span className="text-[14px] font-bold text-[#0b1c30]">Start Your Next Session</span>
+              <p className="text-[12px] text-[#44474d] mt-1 max-w-xs">
+                Take a practice quiz or upload course materials to begin learning.
+              </p>
             </div>
-          </div>
+          )}
 
           <div className="flex items-center gap-3 pt-2">
             <button
-              onClick={() => onNavigate('flashcards')}
+              onClick={() => onNavigate(dashboard?.continueLearning?.type === 'quiz' ? 'quizzes' : 'flashcards')}
               className="flex-1 inline-flex items-center justify-center gap-2 bg-[#0051d5] text-white py-2.5 px-4 rounded-xl text-[13px] font-bold shadow-sm hover:bg-[#316bf3] transition-all cursor-pointer"
               type="button"
             >
-              <span>Resume Session</span>
+              <span>{dashboard?.continueLearning ? 'Resume Session' : 'Start Practice Quiz'}</span>
               <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
             </button>
             <button
@@ -396,7 +474,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <h3 className="text-[18px] font-bold text-[#0b1c30]">Quick Access Learning Tools</h3>
           </div>
           <span className="text-[12px] text-[#44474d]">
-            Everything powered by your uploaded modules
+            Everything powered by your authenticated learning database
           </span>
         </div>
 
@@ -411,7 +489,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <span className="material-symbols-outlined text-[22px]">subject</span>
               </div>
               <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold">
-                4 Generated
+                {dashboard?.materialsCount ?? 0} Materials
               </span>
             </div>
             <div className="mt-4">
@@ -440,7 +518,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <span className="material-symbols-outlined text-[22px]">style</span>
               </div>
               <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-bold">
-                86 Cards
+                {dashboard?.flashcardsCount ?? 0} Cards
               </span>
             </div>
             <div className="mt-4">
@@ -469,7 +547,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <span className="material-symbols-outlined text-[22px]">quiz</span>
               </div>
               <span className="text-[11px] text-[#0051d5] bg-[#eff4ff] px-2 py-0.5 rounded-full font-bold">
-                Timed Mode
+                {dashboard?.quizzesCompleted.total ?? 0} Completed
               </span>
             </div>
             <div className="mt-4">
@@ -477,7 +555,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 Adaptive Quizzes
               </h4>
               <p className="text-[12px] text-[#44474d] mt-1 leading-snug">
-                Multiple choice, true/false, and conceptual exam-grade challenges.
+                Multiple choice, fill-in-blank, and conceptual exam-grade challenges.
               </p>
             </div>
             <div className="flex items-center gap-1 mt-4 text-[#0051d5] text-[12px] font-bold">
@@ -498,7 +576,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <span className="material-symbols-outlined text-[22px]">headphones</span>
               </div>
               <span className="text-[11px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full font-bold">
-                12 min pod
+                Audio Guide
               </span>
             </div>
             <div className="mt-4">
@@ -506,7 +584,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 Audio Summary
               </h4>
               <p className="text-[12px] text-[#44474d] mt-1 leading-snug">
-                Two-host conversational AI podcasts explaining complex theories on commute.
+                Conversational study podcasts explaining complex theories on commute.
               </p>
             </div>
             <div className="flex items-center gap-1 mt-4 text-[#0051d5] text-[12px] font-bold">
@@ -527,7 +605,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <div className="flex flex-col">
               <h3 className="text-[17px] font-bold text-[#0b1c30]">Subject Mastery</h3>
               <span className="text-[12px] text-[#44474d]">
-                Real-time aggregate across all quizzes & flashcards
+                Real-time aggregate across all quizzes in database
               </span>
             </div>
             <button
@@ -541,43 +619,50 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
           {/* Subject Bars */}
           <div className="flex flex-col gap-4 pt-1">
-            {SUBJECT_MASTERY_STATS.map((s, idx) => (
-              <div key={idx} className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-3 h-3 rounded-full ${s.dotClass} inline-block`}></span>
-                    <span className="text-[13px] text-[#0b1c30] font-bold">{s.subject}</span>
-                    <span className="text-[12px] text-[#44474d]">• {s.detail}</span>
+            {loading ? (
+              <div className="py-8 text-center text-[13px] text-[#75777e]">Loading subject metrics...</div>
+            ) : dashboard && dashboard.subjectProgress.length > 0 ? (
+              dashboard.subjectProgress.map((s, idx) => {
+                const color = subjectColors[idx % subjectColors.length];
+                return (
+                  <div key={idx} className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-3 h-3 rounded-full ${color.dot} inline-block`}></span>
+                        <span className="text-[13px] text-[#0b1c30] font-bold">{s.subject}</span>
+                        <span className="text-[12px] text-[#44474d]">
+                          • {s.attempted} questions ({s.quizzesCount} quizzes)
+                        </span>
+                      </div>
+                      <span className="text-[14px] font-bold text-[#0051d5]">{s.accuracy}%</span>
+                    </div>
+                    <div className="w-full bg-[#eff4ff] h-2.5 rounded-full overflow-hidden">
+                      <div
+                        className={`${color.bar} h-full rounded-full transition-all duration-300`}
+                        style={{ width: `${s.accuracy}%` }}
+                      ></div>
+                    </div>
                   </div>
-                  <span className="text-[14px] font-bold text-[#0051d5]">{s.percentage}%</span>
-                </div>
-                <div className="w-full bg-[#eff4ff] h-2.5 rounded-full overflow-hidden">
-                  <div
-                    className={`${s.barClass} h-full rounded-full transition-all duration-300`}
-                    style={{ width: `${s.percentage}%` }}
-                  ></div>
-                </div>
+                );
+              })
+            ) : (
+              <div className="p-6 rounded-xl bg-[#eff4ff] text-center flex flex-col items-center">
+                <span className="material-symbols-outlined text-[28px] text-[#0051d5] mb-1">
+                  analytics
+                </span>
+                <span className="text-[14px] font-bold text-[#0b1c30]">No Subject Quiz Data Yet</span>
+                <p className="text-[12px] text-[#44474d] mt-1 max-w-sm">
+                  Complete quizzes across different subjects to generate your empirical mastery breakdown.
+                </p>
+                <button
+                  onClick={() => onNavigate('quizzes')}
+                  className="mt-3 px-4 py-1.5 bg-[#0051d5] text-white text-[12px] font-bold rounded-lg shadow-xs hover:bg-[#316bf3]"
+                  type="button"
+                >
+                  Take First Quiz →
+                </button>
               </div>
-            ))}
-          </div>
-
-          {/* Cohort Benchmark Banner */}
-          <div className="mt-1 p-3 rounded-xl bg-[#eff4ff] border border-[#dbe1ff] flex items-center justify-between text-[12px] text-[#44474d]">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#0051d5] text-[18px]">
-                workspace_premium
-              </span>
-              <span>
-                You outperform <strong className="text-[#0b1c30] font-bold">82% of university peers</strong>{' '}
-                in Physics this month
-              </span>
-            </div>
-            <span
-              onClick={() => onNavigate('peer-comparison')}
-              className="text-[12px] text-[#0051d5] font-bold cursor-pointer hover:underline"
-            >
-              Compare stats
-            </span>
+            )}
           </div>
         </div>
 
@@ -590,62 +675,75 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </div>
               <div>
                 <h3 className="text-[17px] font-bold text-[#0b1c30]">Focus Area / Weak Topics</h3>
-                <span className="text-[11px] text-[#44474d]">AI prioritized by test error rate</span>
+                <span className="text-[11px] text-[#44474d]">Deterministic accuracy &lt; 70%</span>
               </div>
             </div>
           </div>
 
           {/* Weak Topic List */}
           <div className="flex flex-col gap-2.5">
-            {weakTopics.map((wt) => (
-              <div
-                key={wt.id}
-                className="p-3 rounded-xl bg-[#eff4ff] hover:bg-[#e5eeff] transition-all flex items-center justify-between border border-[#c5c6ce]/20"
-              >
-                <div className="flex flex-col">
-                  <span className="text-[13px] font-bold text-[#0b1c30]">{wt.topicName}</span>
-                  <span
-                    className={`text-[11px] font-semibold ${
-                      wt.priority === 'High Priority'
-                        ? 'text-amber-700'
-                        : wt.priority === 'Needs Revision'
-                        ? 'text-amber-600'
-                        : wt.priority === 'Improving'
-                        ? 'text-emerald-700'
-                        : 'text-[#44474d]'
-                    }`}
-                  >
-                    Accuracy: {wt.accuracy}% • {wt.priority}
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => onSelectWeakTopic(wt)}
-                  className={`px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all shadow-xs cursor-pointer ${
-                    wt.actionType === 'practice'
-                      ? 'bg-[#0051d5] text-white hover:bg-[#316bf3]'
-                      : 'bg-[#d3e4fe] text-[#0b1c30] hover:bg-[#b9c7e6]'
-                  }`}
-                  type="button"
+            {loading ? (
+              <div className="py-8 text-center text-[13px] text-[#75777e]">Evaluating topic accuracy...</div>
+            ) : dashboard && dashboard.weakTopics.length > 0 ? (
+              dashboard.weakTopics.map((wt) => (
+                <div
+                  key={wt.id}
+                  className="p-3 rounded-xl bg-[#eff4ff] hover:bg-[#e5eeff] transition-all flex items-center justify-between border border-[#c5c6ce]/20"
                 >
-                  {wt.recommendedAction}
-                </button>
+                  <div className="flex flex-col pr-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[13px] font-bold text-[#0b1c30]">{wt.topic}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-white text-[#44474d] font-semibold">
+                        {wt.subject}
+                      </span>
+                    </div>
+                    <span
+                      className={`text-[11px] font-semibold ${
+                        wt.priority === 'HIGH'
+                          ? 'text-red-700'
+                          : wt.priority === 'MEDIUM'
+                          ? 'text-amber-700'
+                          : 'text-amber-600'
+                      }`}
+                    >
+                      Accuracy: {wt.accuracy}% • {wt.priority} Priority • {wt.incorrect} Missed
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => onNavigate('weak-topics')}
+                    className="px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all shadow-xs cursor-pointer bg-[#0051d5] text-white hover:bg-[#316bf3] shrink-0"
+                    type="button"
+                  >
+                    Drill →
+                  </button>
+                </div>
+              ))
+            ) : (
+              <div className="p-6 rounded-xl bg-[#eff4ff] text-center flex flex-col items-center">
+                <span className="material-symbols-outlined text-[28px] text-emerald-600 mb-1">
+                  verified
+                </span>
+                <span className="text-[14px] font-bold text-[#0b1c30]">No Weak Topics Detected</span>
+                <p className="text-[12px] text-[#44474d] mt-1 max-w-xs">
+                  All attempted topics currently exceed the 70% threshold. Keep up the high accuracy!
+                </p>
               </div>
-            ))}
+            )}
           </div>
 
           {/* Quick AI Diagnostic Prompt Trigger */}
           <div className="pt-1 flex items-center justify-between text-[12px] text-[#44474d] border-t border-[#c5c6ce]/30">
             <span className="flex items-center gap-1.5 text-[#0051d5] font-semibold">
               <span className="material-symbols-outlined text-[16px]">psychology</span>
-              Need tailored practice tests?
+              Review all weak topics & drills?
             </span>
             <button
-              onClick={onStartRemedialKit}
+              onClick={() => onNavigate('weak-topics')}
               className="text-[#0051d5] text-[12px] font-bold hover:underline cursor-pointer"
               type="button"
             >
-              Generate Remedial Kit
+              Open Weak Topics →
             </button>
           </div>
         </div>

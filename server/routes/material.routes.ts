@@ -16,6 +16,7 @@ import { quotaService } from '../services/governance/quota.service.js';
 import { embeddingQueueService } from '../services/embedding/embedding-queue.service.js';
 import { vectorRepository } from '../repositories/vector/qdrant.repository.js';
 import { embeddingRepository } from '../repositories/embedding.repository.js';
+import { analyticsRepository } from '../repositories/analytics.repository.js';
 
 export const materialRouter = express.Router();
 
@@ -217,12 +218,26 @@ materialRouter.post(
         processingError: null,
       });
 
+      // Log study_material_uploaded event
+      analyticsRepository.logActivity(studentId, 'study_material_uploaded', 0, {
+        material_id: record.id,
+        title: record.title,
+        file_size_bytes: record.file_size_bytes,
+      }).catch((err) => console.error('[Material Routes] Failed to log study_material_uploaded:', err));
+
       // Execute deterministic document intelligence pipeline (Phase 6)
       let processResult = null;
       let finalRecord = record;
       try {
         processResult = await documentProcessingService.processMaterial(record.id, studentId);
         finalRecord = (await materialRepository.getMaterialById(record.id, studentId)) || record;
+
+        if (finalRecord.processing_status === 'ready') {
+          analyticsRepository.logActivity(studentId, 'study_material_processed', 0, {
+            material_id: record.id,
+            chunks: processResult?.totalChunks || 0,
+          }).catch((err) => console.error('[Material Routes] Failed to log study_material_processed:', err));
+        }
 
         if (processResult && processResult.chunks.length > 0) {
           // Bounded embedding worker asynchronously queues vector generation

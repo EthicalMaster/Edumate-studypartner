@@ -23,6 +23,7 @@
     "test:quiz": "tsx server/test/quiz.test.ts",
     "test:retrieval": "tsx server/test/retrieval.test.ts",
     "test:ai": "tsx server/test/ai-gateway.test.ts",
+    "test:analytics": "tsx server/test/analytics.test.ts",
     "test:runner": "tsx server/test/python-runner.test.ts",
     "test:load": "tsx server/test/load.test.ts",
     "test:capacity": "tsx server/test/capacity.test.ts"

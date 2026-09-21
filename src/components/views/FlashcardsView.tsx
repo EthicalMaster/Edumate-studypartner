@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import confetti from 'canvas-confetti';
 import { Flashcard, StudyKit, ActiveNavTab } from '../../types';
+import { useStudySession } from '../../hooks/useStudySession';
 
 interface FlashcardsViewProps {
   flashcards: Flashcard[];
@@ -13,6 +14,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   studyKits,
   onNavigate,
 }) => {
+  useStudySession();
   const [selectedKitId, setSelectedKitId] = useState<string>('all');
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isFlipped, setIsFlipped] = useState<boolean>(false);
