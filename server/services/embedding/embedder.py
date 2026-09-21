@@ -34,6 +34,15 @@ def main():
         sys.stderr.write(f"SentenceTransformers load error: {e}\n")
         sys.exit(1)
 
+    # Dedicated readiness message emitted to stdout after model is fully loaded into memory/device
+    print(json.dumps({
+        "ready": True,
+        "device": device,
+        "model": "BAAI/bge-small-en-v1.5",
+        "dimension": 384
+    }))
+    sys.stdout.flush()
+
     for line in sys.stdin:
         line = line.strip()
         if not line:

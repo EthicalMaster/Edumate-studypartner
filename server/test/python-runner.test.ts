@@ -10,6 +10,8 @@ import {
   PythonEmbeddingRunner,
   resolvePythonExecutable,
   resolveEmbedderScriptPath,
+  resolveHealthcheckTimeoutMs,
+  resolveStartupTimeoutMs,
 } from '../services/embedding/python-embedding-runner.js';
 import { LocalBgeEmbeddingService } from '../services/embedding/embedding.service.js';
 
@@ -75,6 +77,76 @@ async function runTests(): Promise<void> {
       const scriptPath = resolveEmbedderScriptPath();
       assert(fs.existsSync(scriptPath), `Embedder script must exist at ${scriptPath}`);
       assert(scriptPath.endsWith('embedder.py'));
+    });
+
+    await test('resolveHealthcheckTimeoutMs defaults to 30000ms when absent or invalid', () => {
+      const original = process.env.EMBEDDING_HEALTHCHECK_TIMEOUT_MS;
+      try {
+        delete process.env.EMBEDDING_HEALTHCHECK_TIMEOUT_MS;
+        assert.strictEqual(resolveHealthcheckTimeoutMs(), 30000);
+
+        process.env.EMBEDDING_HEALTHCHECK_TIMEOUT_MS = 'not_a_number';
+        assert.strictEqual(resolveHealthcheckTimeoutMs(), 30000);
+
+        process.env.EMBEDDING_HEALTHCHECK_TIMEOUT_MS = '-500';
+        assert.strictEqual(resolveHealthcheckTimeoutMs(), 30000);
+
+        process.env.EMBEDDING_HEALTHCHECK_TIMEOUT_MS = '   ';
+        assert.strictEqual(resolveHealthcheckTimeoutMs(), 30000);
+      } finally {
+        if (original !== undefined) {
+          process.env.EMBEDDING_HEALTHCHECK_TIMEOUT_MS = original;
+        } else {
+          delete process.env.EMBEDDING_HEALTHCHECK_TIMEOUT_MS;
+        }
+      }
+    });
+
+    await test('resolveHealthcheckTimeoutMs parses positive integers from EMBEDDING_HEALTHCHECK_TIMEOUT_MS', () => {
+      const original = process.env.EMBEDDING_HEALTHCHECK_TIMEOUT_MS;
+      try {
+        process.env.EMBEDDING_HEALTHCHECK_TIMEOUT_MS = '45000';
+        assert.strictEqual(resolveHealthcheckTimeoutMs(), 45000);
+
+        process.env.EMBEDDING_HEALTHCHECK_TIMEOUT_MS = ' 12000 ';
+        assert.strictEqual(resolveHealthcheckTimeoutMs(), 12000);
+      } finally {
+        if (original !== undefined) {
+          process.env.EMBEDDING_HEALTHCHECK_TIMEOUT_MS = original;
+        } else {
+          delete process.env.EMBEDDING_HEALTHCHECK_TIMEOUT_MS;
+        }
+      }
+    });
+
+    await test('PythonEmbeddingRunner defaults healthcheckTimeoutMs to 30000ms', () => {
+      const runner = PythonEmbeddingRunner.getInstance();
+      assert.strictEqual(runner.getHealthcheckTimeoutMs(), 30000);
+      assert.strictEqual(runner.getTimeoutMs(), 30000);
+      assert.strictEqual(runner.getStartupTimeoutMs(), 120000);
+    });
+
+    await test('resolveStartupTimeoutMs defaults to 120000ms and parses positive integers', () => {
+      const original = process.env.EMBEDDING_STARTUP_TIMEOUT_MS;
+      try {
+        delete process.env.EMBEDDING_STARTUP_TIMEOUT_MS;
+        assert.strictEqual(resolveStartupTimeoutMs(), 120000);
+
+        process.env.EMBEDDING_STARTUP_TIMEOUT_MS = 'not_a_num';
+        assert.strictEqual(resolveStartupTimeoutMs(), 120000);
+
+        process.env.EMBEDDING_STARTUP_TIMEOUT_MS = '180000';
+        assert.strictEqual(resolveStartupTimeoutMs(), 180000);
+
+        process.env.EMBEDDING_STARTUP_TIMEOUT_MS = ' 60000 ';
+        assert.strictEqual(resolveStartupTimeoutMs(), 60000);
+      } finally {
+        if (original !== undefined) {
+          process.env.EMBEDDING_STARTUP_TIMEOUT_MS = original;
+        } else {
+          delete process.env.EMBEDDING_STARTUP_TIMEOUT_MS;
+        }
+      }
     });
 
     // --------------------------------------------------------------------------
@@ -163,6 +235,8 @@ async function runTests(): Promise<void> {
 import sys
 import json
 import math
+import os
+import time
 
 def generate_vector(text, dim=384):
     val = float(len(text) % 10 + 1)
@@ -171,9 +245,30 @@ def generate_vector(text, dim=384):
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--device":
+        if os.environ.get("SIMULATE_SLOW_PROBE") == "1":
+            # Simulate a 600ms slow probe (representing long initialization in test environment)
+            time.sleep(0.6)
         print(json.dumps({"device": "cuda", "model": "BAAI/bge-small-en-v1.5", "dimension": 384}))
         sys.stdout.flush()
         return
+
+    # Simulate exit before readiness if requested
+    if os.environ.get("SIMULATE_EXIT_BEFORE_READY") == "1":
+        sys.stderr.write("Simulated startup failure: CUDA out of memory during SentenceTransformer initialization\\n")
+        sys.exit(137)
+
+    # Simulate startup timeout / hang if requested
+    if os.environ.get("SIMULATE_SLOW_STARTUP") == "1":
+        time.sleep(2.0)
+
+    # Dedicated readiness message emitted to stdout after model is fully loaded
+    print(json.dumps({
+        "ready": True,
+        "device": "cuda",
+        "model": "BAAI/bge-small-en-v1.5",
+        "dimension": 384
+    }))
+    sys.stdout.flush()
 
     for line in sys.stdin:
         line = line.strip()
@@ -192,7 +287,6 @@ def main():
                 sys.stderr.write("Simulated worker fatal crash!\\n")
                 sys.exit(42)
             if texts and texts[0] == "__TRIGGER_TIMEOUT__":
-                import time
                 time.sleep(2.0)
                 continue
 
@@ -220,6 +314,87 @@ if __name__ == "__main__":
       assert.strictEqual(health.device, 'cuda');
       assert.strictEqual(health.dimension, 384);
       assert.strictEqual(health.model, 'BAAI/bge-small-en-v1.5');
+    });
+
+    await test('Health check accepts probe completing within configurable timeout window (>5s equivalent)', async () => {
+      process.env.SIMULATE_SLOW_PROBE = '1';
+      // Set healthcheck timeout to 2000ms (greater than the 600ms simulated initialization delay)
+      runner.setHealthcheckTimeoutMs(2000);
+      try {
+        const health = await runner.checkHealth(true);
+        assert.strictEqual(health.isHealthy, true, 'Probe taking longer than normal must succeed before timeout');
+        assert.strictEqual(health.device, 'cuda');
+      } finally {
+        delete process.env.SIMULATE_SLOW_PROBE;
+        runner.setHealthcheckTimeoutMs(30000);
+      }
+    });
+
+    await test('Health check fails cleanly when probe exceeds configured timeout', async () => {
+      process.env.SIMULATE_SLOW_PROBE = '1';
+      // Set healthcheck timeout shorter than the 600ms simulated probe delay
+      runner.setHealthcheckTimeoutMs(200);
+      try {
+        const health = await runner.checkHealth(true);
+        assert.strictEqual(health.isHealthy, false, 'Probe exceeding timeout must be reported unhealthy');
+        assert(health.error?.includes('timed out after 200ms'), `Expected timeout error message, got: ${health.error}`);
+      } finally {
+        delete process.env.SIMULATE_SLOW_PROBE;
+        runner.setHealthcheckTimeoutMs(30000);
+      }
+    });
+
+    await test('Runner startSubprocess waits for ready:true handshake and updates device/model/dimension', async () => {
+      runner.shutdown();
+      // Verify ensureProcess waits for ready:true handshake
+      await (runner as any).ensureProcess();
+      assert.strictEqual(runner.isAvailable(), true);
+      assert.strictEqual(runner.getDevice(), 'cuda');
+      assert.strictEqual(runner.getModelName(), 'BAAI/bge-small-en-v1.5');
+      assert.strictEqual(runner.getDimension(), 384);
+    });
+
+    await test('Runner rejects startup if process exits before emitting ready:true', async () => {
+      runner.shutdown();
+      process.env.SIMULATE_EXIT_BEFORE_READY = '1';
+      try {
+        let threw = false;
+        try {
+          await (runner as any).ensureProcess();
+        } catch (err: any) {
+          threw = true;
+          assert(
+            err.message.includes('failed to start') || err.message.includes('CUDA out of memory') || err.message.includes('exit code 137'),
+            `Unexpected error message: ${err.message}`
+          );
+        }
+        assert.strictEqual(threw, true, 'Must reject when worker exits before ready:true handshake');
+        assert.strictEqual(runner.isAvailable(), false);
+      } finally {
+        delete process.env.SIMULATE_EXIT_BEFORE_READY;
+        runner.shutdown();
+      }
+    });
+
+    await test('Runner startup times out if ready:true handshake is not received within EMBEDDING_STARTUP_TIMEOUT_MS', async () => {
+      runner.shutdown();
+      process.env.SIMULATE_SLOW_STARTUP = '1';
+      runner.setStartupTimeoutMs(300); // Set small 300ms startup timeout for test
+      try {
+        let threw = false;
+        try {
+          await (runner as any).ensureProcess();
+        } catch (err: any) {
+          threw = true;
+          assert(err.message.includes('startup timed out after 300ms'), `Unexpected error message: ${err.message}`);
+        }
+        assert.strictEqual(threw, true, 'Must reject on startup timeout before ready:true');
+        assert.strictEqual(runner.isAvailable(), false);
+      } finally {
+        delete process.env.SIMULATE_SLOW_STARTUP;
+        runner.setStartupTimeoutMs(120000); // Restore 120s default
+        runner.shutdown();
+      }
     });
 
     await test('embedTexts generates 384-dimensional vectors over JSON lines', async () => {

@@ -14,6 +14,13 @@ export interface ResourceQuotaConfig {
   defaultRetrievalTopK: number;         // DEFAULT_RETRIEVAL_TOP_K (default 5)
   embeddingWorkerConcurrency: number;   // EMBEDDING_WORKER_CONCURRENCY (default 1)
   embeddingBatchSize: number;           // EMBEDDING_BATCH_SIZE (default 16)
+  // Phase 8: AI Gateway Governance Limits
+  maxDailyAiRequestsPerStudent: number; // AI_REQUESTS_PER_DAY (default 100)
+  maxInputCharsPerRequest: number;      // AI_MAX_INPUT_CHARS (default 20,000)
+  maxOutputTokensPerRequest: number;    // AI_MAX_OUTPUT_TOKENS (default 1,500)
+  maxConcurrentAiRequestsPerStudent: number; // AI_MAX_CONCURRENT_PER_STUDENT (default 2)
+  maxGlobalConcurrentAiRequests: number;     // AI_MAX_GLOBAL_CONCURRENT (default 4)
+  aiRequestTimeoutMs: number;           // AI_REQUEST_TIMEOUT_MS (default 30,000)
 }
 
 function parseEnvInt(val: string | undefined, fallback: number): number {
@@ -34,6 +41,14 @@ export function loadResourceQuotas(): ResourceQuotaConfig {
   const workerConcurrency = parseEnvInt(process.env.EMBEDDING_WORKER_CONCURRENCY, 1);
   const batchSize = parseEnvInt(process.env.EMBEDDING_BATCH_SIZE, 16);
 
+  // Phase 8: AI Gateway limits
+  const dailyAiRequests = parseEnvInt(process.env.AI_REQUESTS_PER_DAY, 100);
+  const maxInputChars = parseEnvInt(process.env.AI_MAX_INPUT_CHARS, 20_000);
+  const maxOutputTokens = parseEnvInt(process.env.AI_MAX_OUTPUT_TOKENS, 1500);
+  const maxConcurrentPerStudent = parseEnvInt(process.env.AI_MAX_CONCURRENT_PER_STUDENT, 2);
+  const maxGlobalConcurrent = parseEnvInt(process.env.AI_MAX_GLOBAL_CONCURRENT, 4);
+  const aiTimeoutMs = parseEnvInt(process.env.AI_REQUEST_TIMEOUT_MS, 30_000);
+
   return {
     maxStorageBytesPerStudent: storageQuotaMB * 1024 * 1024,
     maxFileSizeBytes: maxFileMB * 1024 * 1024,
@@ -45,6 +60,12 @@ export function loadResourceQuotas(): ResourceQuotaConfig {
     defaultRetrievalTopK: defaultTopK,
     embeddingWorkerConcurrency: workerConcurrency,
     embeddingBatchSize: batchSize,
+    maxDailyAiRequestsPerStudent: dailyAiRequests,
+    maxInputCharsPerRequest: maxInputChars,
+    maxOutputTokensPerRequest: maxOutputTokens,
+    maxConcurrentAiRequestsPerStudent: maxConcurrentPerStudent,
+    maxGlobalConcurrentAiRequests: maxGlobalConcurrent,
+    aiRequestTimeoutMs: aiTimeoutMs,
   };
 }
 

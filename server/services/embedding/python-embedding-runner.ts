@@ -40,6 +40,38 @@ export function resolvePythonExecutable(): string {
 }
 
 /**
+ * Resolves the health-check timeout in milliseconds.
+ * Uses EMBEDDING_HEALTHCHECK_TIMEOUT_MS if valid and positive.
+ * Defaults to 30000ms (30s) to accommodate model/CUDA initialization on Windows.
+ */
+export function resolveHealthcheckTimeoutMs(): number {
+  const raw = process.env.EMBEDDING_HEALTHCHECK_TIMEOUT_MS?.trim();
+  if (raw) {
+    const parsed = parseInt(raw, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return 30000;
+}
+
+/**
+ * Resolves the startup and model loading timeout in milliseconds.
+ * Uses EMBEDDING_STARTUP_TIMEOUT_MS if valid and positive.
+ * Defaults to 120000ms (2 minutes) to allow first-time BGE model weights downloading and loading.
+ */
+export function resolveStartupTimeoutMs(): number {
+  const raw = process.env.EMBEDDING_STARTUP_TIMEOUT_MS?.trim();
+  if (raw) {
+    const parsed = parseInt(raw, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return 120000;
+}
+
+/**
  * Resolves the absolute path to embedder.py.
  */
 export function resolveEmbedderScriptPath(): string {
@@ -88,6 +120,8 @@ export class PythonEmbeddingRunner {
   private modelName = 'BAAI/bge-small-en-v1.5';
   private dimension = 384;
   private timeoutMs = 30000;
+  private healthcheckTimeoutMs: number = resolveHealthcheckTimeoutMs();
+  private startupTimeoutMs: number = resolveStartupTimeoutMs();
 
   private constructor() {
     // Perform initial non-blocking health check
@@ -129,6 +163,26 @@ export class PythonEmbeddingRunner {
 
   public setTimeoutMs(timeoutMs: number): void {
     this.timeoutMs = timeoutMs;
+  }
+
+  public getTimeoutMs(): number {
+    return this.timeoutMs;
+  }
+
+  public setHealthcheckTimeoutMs(timeoutMs: number): void {
+    this.healthcheckTimeoutMs = timeoutMs;
+  }
+
+  public getHealthcheckTimeoutMs(): number {
+    return this.healthcheckTimeoutMs;
+  }
+
+  public setStartupTimeoutMs(timeoutMs: number): void {
+    this.startupTimeoutMs = timeoutMs;
+  }
+
+  public getStartupTimeoutMs(): number {
+    return this.startupTimeoutMs;
   }
 
   /**
@@ -184,6 +238,7 @@ export class PythonEmbeddingRunner {
         });
       }
 
+      const timeoutMs = this.healthcheckTimeoutMs;
       timer = setTimeout(() => {
         if (!settled) {
           settled = true;
@@ -198,10 +253,10 @@ export class PythonEmbeddingRunner {
             device: 'cpu',
             model: this.modelName,
             dimension: this.dimension,
-            error: 'Health check probe timed out after 5000ms',
+            error: `Health check probe timed out after ${timeoutMs}ms`,
           });
         }
-      }, 5000);
+      }, timeoutMs);
 
       child.stdout?.on('data', (chunk: Buffer) => {
         stdout += chunk.toString('utf8');
@@ -350,6 +405,31 @@ export class PythonEmbeddingRunner {
       this.stderrHistory = [];
 
       let hasStarted = false;
+      let startupTimer: NodeJS.Timeout | null = null;
+
+      const cleanupStartup = () => {
+        if (startupTimer) {
+          clearTimeout(startupTimer);
+          startupTimer = null;
+        }
+      };
+
+      startupTimer = setTimeout(() => {
+        if (!hasStarted) {
+          hasStarted = true;
+          this.isHealthy = false;
+          console.error(
+            `[PythonEmbeddingRunner] Startup timed out after ${this.startupTimeoutMs}ms waiting for BGE model readiness.`
+          );
+          try {
+            child.kill();
+          } catch {
+            // Ignore
+          }
+          const recent = this.getRecentStderr();
+          reject(new Error(`Python embedder process startup timed out after ${this.startupTimeoutMs}ms: ${recent}`));
+        }
+      }, this.startupTimeoutMs);
 
       child.stdout?.on('data', (chunk: Buffer) => {
         this.stdoutBuffer += chunk.toString('utf8');
@@ -358,6 +438,40 @@ export class PythonEmbeddingRunner {
           const line = this.stdoutBuffer.slice(0, newlineIndex).trim();
           this.stdoutBuffer = this.stdoutBuffer.slice(newlineIndex + 1);
           if (line.length > 0) {
+            if (!hasStarted) {
+              try {
+                const parsed = JSON.parse(line);
+                if (parsed.ready === true) {
+                  hasStarted = true;
+                  cleanupStartup();
+
+                  if (parsed.device === 'cuda' || parsed.device === 'cpu') {
+                    this.device = parsed.device;
+                  }
+                  if (parsed.model) {
+                    this.modelName = parsed.model;
+                  }
+                  if (parsed.dimension && typeof parsed.dimension === 'number') {
+                    this.dimension = parsed.dimension;
+                  }
+                  this.isHealthy = true;
+
+                  console.log(
+                    `[PythonEmbeddingRunner] BGE model ready: model="${this.modelName}", device="${this.device}", dimension=${this.dimension}`
+                  );
+                  resolve();
+                  continue;
+                } else if (parsed.error) {
+                  hasStarted = true;
+                  cleanupStartup();
+                  this.isHealthy = false;
+                  reject(new Error(`Python embedder startup reported error: ${parsed.error}`));
+                  continue;
+                }
+              } catch {
+                // Non-JSON or preliminary log line during startup; continue waiting for readiness message
+              }
+            }
             this.handleStdoutLine(line);
           }
         }
@@ -371,7 +485,8 @@ export class PythonEmbeddingRunner {
       child.on('error', (err: Error) => {
         console.error(`[PythonEmbeddingRunner] Child process error: ${err.message}`);
         this.isHealthy = false;
-        this.handleProcessTermination(null, err.message);
+        cleanupStartup();
+        this.handleProcessTermination(child, null, err.message);
         if (!hasStarted) {
           hasStarted = true;
           reject(err);
@@ -381,28 +496,14 @@ export class PythonEmbeddingRunner {
       child.on('exit', (code, signal) => {
         console.warn(`[PythonEmbeddingRunner] Process exited (code: ${code}, signal: ${signal})`);
         this.isHealthy = false;
-        this.handleProcessTermination(code, signal);
+        cleanupStartup();
+        this.handleProcessTermination(child, code, signal);
         if (!hasStarted) {
           hasStarted = true;
           const recent = this.getRecentStderr();
           reject(new Error(`Python embedder process failed to start (exit code ${code}): ${recent}`));
         }
       });
-
-      // Give a brief window (350ms) to ensure process didn't immediately exit (e.g. missing modules)
-      setTimeout(() => {
-        if (!hasStarted) {
-          hasStarted = true;
-          if (child.killed || child.exitCode !== null) {
-            this.isHealthy = false;
-            const recent = this.getRecentStderr();
-            reject(new Error(`Python embedder exited immediately: ${recent}`));
-          } else {
-            this.isHealthy = true;
-            resolve();
-          }
-        }
-      }, 350);
     });
   }
 
@@ -487,22 +588,28 @@ export class PythonEmbeddingRunner {
     this.processNext();
   }
 
-  private handleProcessTermination(code: number | null, signal: string | null): void {
-    this.process = null;
+  private handleProcessTermination(
+    terminatedChild: ChildProcess,
+    code: number | null,
+    signal: string | null
+  ): void {
+    if (this.process === terminatedChild) {
+      this.process = null;
 
-    if (this.activeRequest) {
-      const item = this.activeRequest;
-      if (item.timer) clearTimeout(item.timer);
-      this.activeRequest = null;
-      const recent = this.getRecentStderr();
-      item.reject(new Error(`Python embedder process terminated unexpectedly (code ${code}): ${recent}`));
-    }
+      if (this.activeRequest) {
+        const item = this.activeRequest;
+        if (item.timer) clearTimeout(item.timer);
+        this.activeRequest = null;
+        const recent = this.getRecentStderr();
+        item.reject(new Error(`Python embedder process terminated unexpectedly (code ${code}): ${recent}`));
+      }
 
-    // Reject all queued requests
-    while (this.requestQueue.length > 0) {
-      const q = this.requestQueue.shift()!;
-      if (q.timer) clearTimeout(q.timer);
-      q.reject(new Error(`Python embedder process exited before processing request (code ${code})`));
+      // Reject all queued requests
+      while (this.requestQueue.length > 0) {
+        const q = this.requestQueue.shift()!;
+        if (q.timer) clearTimeout(q.timer);
+        q.reject(new Error(`Python embedder process exited before processing request (code ${code})`));
+      }
     }
   }
 
@@ -538,26 +645,24 @@ export class PythonEmbeddingRunner {
   public shutdown(): void {
     if (this.process) {
       console.log('[PythonEmbeddingRunner] Shutting down Python embedder process...');
+      const proc = this.process;
+      this.process = null;
+
       try {
-        if (this.process.stdin?.writable) {
-          this.process.stdin.end();
+        if (proc.stdin?.writable) {
+          proc.stdin.end();
         }
       } catch {
         // Ignore
       }
 
-      const proc = this.process;
-      setTimeout(() => {
-        if (!proc.killed && proc.exitCode === null) {
-          try {
-            proc.kill('SIGTERM');
-          } catch {
-            // Ignore
-          }
+      try {
+        if (!proc.killed) {
+          proc.kill('SIGTERM');
         }
-      }, 300);
-
-      this.process = null;
+      } catch {
+        // Ignore
+      }
     }
 
     if (this.activeRequest) {
