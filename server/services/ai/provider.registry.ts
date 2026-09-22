@@ -16,6 +16,7 @@
 import type { IAIProvider } from './provider.interface.js';
 import { NullAIProvider } from './providers/null.provider.js';
 import { LocalAIProvider } from './providers/local.provider.js';
+import { GroqProvider } from './providers/groq.provider.js';
 import { getAIConfig } from './config.js';
 import { AIConfigurationError } from './errors.js';
 
@@ -34,6 +35,9 @@ export class AIProviderRegistry {
 
     // Register local model adapter
     this.registerProvider(new LocalAIProvider());
+
+    // Register Groq cloud inference provider
+    this.registerProvider(new GroqProvider());
   }
 
   /**

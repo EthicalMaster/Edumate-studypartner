@@ -41,6 +41,8 @@ import { providerRegistry } from './provider.registry.js';
 import { quotaService } from '../governance/quota.service.js';
 import { getAIConfig } from './config.js';
 import { aiTelemetryService } from './telemetry.service.js';
+import { validateStructuredOutput } from './schemas.js';
+import type { z } from 'zod';
 
 export interface ExecuteAIInput {
   /** Authenticated student ID (strictly from session, NEVER from client body) */
@@ -51,6 +53,7 @@ export interface ExecuteAIInput {
   retrievedContext?: RetrievedContext[];
   temperature?: number;
   maxTokens?: number;
+  responseFormat?: 'text' | 'json_object';
   metadata?: Record<string, any>;
 }
 
@@ -171,6 +174,7 @@ export class AIGatewayService {
       retrievedContext: contextItems.length > 0 ? contextItems : undefined,
       temperature: typeof input.temperature === 'number' ? Math.max(0, Math.min(1, input.temperature)) : 0.7,
       maxTokens: sanitizedMaxTokens,
+      responseFormat: input.responseFormat,
       metadata: input.metadata,
     };
 
@@ -201,6 +205,7 @@ export class AIGatewayService {
         provider: response.provider || provider.id,
         model: response.model || provider.modelName,
         text: response.text || '',
+        parsedJson: response.parsedJson,
         usage: {
           inputChars: totalInputChars,
           inputTokens: response.usage?.inputTokens ?? Math.ceil(totalInputChars / 4),
@@ -254,6 +259,23 @@ export class AIGatewayService {
       // GUARANTEED: Release concurrency slot
       quotaService.releaseAiConcurrencySlot(studentId);
     }
+  }
+
+  /**
+   * Executes structured generation and validates against a Zod schema.
+   * Prevents arbitrary or unvalidated outputs in downstream educational features.
+   */
+  public async executeStructured<T>(
+    input: Omit<ExecuteAIInput, 'responseFormat'>,
+    schema: z.ZodType<T>
+  ): Promise<{ response: AIResponse; data: T }> {
+    const response = await this.execute({
+      ...input,
+      responseFormat: 'json_object',
+    });
+
+    const data = validateStructuredOutput(schema, response.text);
+    return { response, data };
   }
 
   /**

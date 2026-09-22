@@ -24,7 +24,10 @@ export interface AIConfig {
 
 export function loadAIConfig(): AIConfig {
   const provider = (process.env.AI_PROVIDER || 'none').trim().toLowerCase();
-  const model = (process.env.AI_MODEL || '').trim();
+  let model = (process.env.AI_MODEL || '').trim();
+  if (!model && provider === 'groq') {
+    model = (process.env.GROQ_MODEL || 'llama-3.3-70b-versatile').trim();
+  }
   const quotaConfig = quotaService.getConfig();
 
   return {

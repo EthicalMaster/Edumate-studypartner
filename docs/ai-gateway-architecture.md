@@ -51,16 +51,38 @@ The **EDUMATE AI Gateway** (`server/services/ai/`) provides a secure, vendor-neu
                 │    unknown providers     │   │  - Token/char boundaries │
                 └────────────┬─────────────┘   └──────────────────────────┘
                              │
-            ┌────────────────┴────────────────────────┐
-            ▼                                         ▼
-┌─────────────────────────┐               ┌─────────────────────────┐
-│     NullAIProvider      │               │     LocalAIProvider     │
-│  (Development / Null)   │               │   (Self-Hosted HTTP)    │
-│  - provider="development"               │  - provider="local"     │
-│  - model="null"         │               │  - Boundary for Ollama/ │
-│  - Deterministic status │               │    vLLM HTTP server     │
-└─────────────────────────┘               └─────────────────────────┘
+            ┌────────────────┴────────────────────────┬─────────────────────────┐
+            ▼                                         ▼                         ▼
+┌─────────────────────────┐               ┌─────────────────────────┐  ┌─────────────────────────┐
+│     NullAIProvider      │               │     LocalAIProvider     │  │      GroqProvider       │
+│  (Development / Null)   │               │   (Self-Hosted HTTP)    │  │ (Cloud High-Speed LLM)  │
+│  - provider="development"               │  - provider="local"     │  │  - provider="groq"      │
+│  - model="null"         │               │  - Boundary for Ollama/ │  │  - model="llama-3.3-   │
+│  - Deterministic status │               │    vLLM HTTP server     │  │    70b-versatile"       │
+└─────────────────────────┘               └─────────────────────────┘  └─────────────────────────┘
 ```
+
+### Retrieval Layer vs. Generation Layer Architecture
+
+A strict boundary is maintained between vector retrieval and text generation:
+
+```
+EDUMATE Architecture
+ └── AI Gateway
+      ├── Retrieval Layer (UNCHANGED)
+      │    ├── Document Intelligence (PDF extraction, hierarchical sectioning, chunking)
+      │    ├── IEmbeddingService (BAAI/bge-small-en-v1.5, 384 dimensions)
+      │    └── Vector Database (Qdrant collection edumate_documents)
+      │
+      └── Generation Layer (Phase 9)
+           └── GroqProvider (/chat/completions, Llama 3.3 70B Versatile)
+```
+
+**Key Architectural Invariants:**
+- Groq is **strictly an inference / generation provider**.
+- Groq **never** replaces, touches, or mimics BGE embeddings, Qdrant vector retrieval, or Document Intelligence.
+- Groq API keys reside exclusively on the server (`GROQ_API_KEY`). The browser client never communicates with Groq directly.
+- The AI Gateway remains completely model-agnostic, enabling future drop-in replacement with local models (Ollama, vLLM, RTX 3050 CUDA) without modifying EDUMATE feature logic.
 
 ---
 
@@ -194,25 +216,49 @@ All gateway failures are normalized into subclasses of `AIGatewayError` to ensur
 | `AIProviderUnavailableError` | `503` | `AI_PROVIDER_UNAVAILABLE` | Upstream provider offline or unreachable |
 | `AIProviderTimeoutError` | `504` | `AI_PROVIDER_TIMEOUT` | Provider took longer than `AI_REQUEST_TIMEOUT_MS` |
 | `AIProviderRateLimitedError` | `429` | `AI_PROVIDER_RATE_LIMITED` | Upstream provider rate limit encountered |
+| `AIProviderAuthenticationError` | `503` | `AI_PROVIDER_AUTHENTICATION_ERROR` | Server-side API key unconfigured or invalid |
+| `AIStructuredOutputError` | `502` | `AI_STRUCTURED_OUTPUT_INVALID` | Model response failed JSON or Zod schema validation |
 
 ---
 
-## 8. Diagnostics & Security Safeguards
+## 8. Structured Educational Output Schemas (Phase 9)
+
+To prevent brittle parsing of arbitrary natural language, EDUMATE utilizes typed Zod schemas (`server/services/ai/schemas.ts`) through `aiGatewayService.executeStructured`:
+
+- `GenericGenerationResultSchema`: Provider, model, generated text, token usage metrics, latency, finish reason.
+- `QuizQuestionGenerationSchema`: Pedagogically sound questions with distinct options, correct key, explanation, and difficulty.
+- `FlashcardGenerationSchema`: Question, answer, key concept, optional formula, difficulty rating.
+- `SummaryGenerationSchema`: Structured title, overview, key bullet points, and critical terms with definitions.
+- `ExplanationGenerationSchema`: Core concept summary, detailed pedagogical breakdown, takeaways, follow-up questions.
+- `StudyPlanGenerationSchema`: Timed multi-day study schedule with daily goals and estimated study minutes.
+- `TeacherResponseSchema` / `BuddyResponseSchema`: Persona-specific responses (pedagogical explanation vs. friendly encouragement).
+
+---
+
+## 9. Diagnostics & Security Safeguards
 
 - **Diagnostics Endpoint (`GET /api/ai/diagnostics`):**
   - Requires student authentication (`requireAuth`).
   - Reports provider status (`READY`, `NOT_CONFIGURED`, `DEGRADED`, `ERROR`), active model, and configured limits.
   - **Zero Secrets:** Never reports API keys, connection strings, or system paths.
+  - **Zero Waste:** Does not send unnecessary full completion requests on health checks.
 - **Privacy-Preserving Telemetry (`aiTelemetryService`):**
   - Logs operational metadata (`requestId`, `studentId`, `purpose`, `latencyMs`, `inputChars`, `success`).
   - **Strict Mandate:** Never stores raw prompt text, messages, generated answers, passwords, or session tokens.
 
 ---
 
-## 9. Scope Discipline: What is NOT in Phase 8
+## 10. Scope Discipline: What is in Phase 9 vs. Future Phases
 
-Phase 8 is strictly foundational infrastructure. The following are intentionally out of scope:
-- **No Chatbots or Pedagogical Agents:** (Teacher AI, Buddy AI, Study Buddy, Chatbot UI).
-- **No Autonomous Agents or Tools:** No browser control, tool calling, or multi-agent loops.
-- **No Proprietary Vendor SDKs:** No direct Gemini/OpenAI/Anthropic SDK lock-in.
-- **No Fine-Tuning or LLM Weight Downloads:** No model weights or runtime downloads.
+Phase 9 is strictly **Provider Infrastructure Only**:
+- **Included in Phase 9:**
+  - `GroqProvider` implementing `IAIProvider` contract.
+  - `AIProviderRegistry` registration and dynamic resolution.
+  - Strongly typed Zod schemas for structured educational output.
+  - Authenticated test routes (`POST /api/ai/test` and `POST /api/ai/test/structured`).
+  - Normalized error handling, rate limiting, and timeout guards.
+  - Full automated verification test suite (`npm run test:groq`).
+- **Strictly Deferred to Subsequent Phases:**
+  - Do NOT connect Groq to Quiz Builder, uploaded PDFs, question generation, flashcards, summaries, Teacher AI, or Buddy AI yet.
+  - No end-user facing UI changes.
+

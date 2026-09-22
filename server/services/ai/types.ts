@@ -66,6 +66,8 @@ export interface AIRequest {
   temperature?: number;
   /** Maximum generated tokens (clamped by server governance limits) */
   maxTokens?: number;
+  /** Optional response format enforcement ('text' or 'json_object') */
+  responseFormat?: 'text' | 'json_object';
   /** Optional caller metadata (no secrets allowed) */
   metadata?: Record<string, any>;
 }
@@ -88,6 +90,7 @@ export interface AIResponse {
   provider: string;
   model: string;
   text: string;
+  parsedJson?: any;
   usage?: TokenUsage;
   finishReason?: 'stop' | 'length' | 'timeout' | 'null' | 'error';
   latencyMs: number;
