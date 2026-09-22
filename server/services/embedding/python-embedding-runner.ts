@@ -348,8 +348,17 @@ export class PythonEmbeddingRunner {
     if (!Array.isArray(texts)) {
       throw new Error('texts must be an array of strings');
     }
+
     if (texts.length === 0) {
       return [];
+    }
+
+    const health = await this.checkHealth();
+
+    if (!health.isHealthy) {
+      throw new Error(
+        health.error || 'Real BGE embedding engine is unavailable.'
+      );
     }
 
     await this.ensureProcess();
@@ -366,9 +375,6 @@ export class PythonEmbeddingRunner {
     });
   }
 
-  /**
-   * Ensures the long-lived Python subprocess is running and listening on stdin.
-   */
   private async ensureProcess(): Promise<void> {
     if (this.process && !this.process.killed && this.process.stdin?.writable) {
       return;

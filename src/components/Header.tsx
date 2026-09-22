@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { analyticsApi } from '../services/analyticsApi';
 import { NotificationItem } from '../types';
 import { useAuth } from '../context/AuthContext';
 
@@ -22,6 +23,28 @@ export const Header: React.FC<HeaderProps> = ({
   const { user, logout } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+
+  const [currentStreak, setCurrentStreak] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    analyticsApi.getDashboard()
+      .then((dashboard) => {
+        if (!cancelled) {
+          setCurrentStreak(dashboard.studyStreak.currentStreak);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCurrentStreak(0);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
   const studentName = user?.profile?.full_name || 'Student';
@@ -86,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* 7 Day Streak Pill */}
         <div className="flex items-center gap-1.5 bg-[#e5eeff] px-3 py-1.5 rounded-full text-[#0051d5] text-[12px] font-semibold border border-[#0051d5]/15 shadow-xs">
           <span className="material-symbols-outlined text-[18px] text-amber-500">local_fire_department</span>
-          <span>7 Day Streak</span>
+          <span>{currentStreak > 0 ? currentStreak + " Day Streak" : "Start Streak"}</span>
         </div>
 
         {/* Notifications Popover */}
@@ -220,3 +243,5 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+
+

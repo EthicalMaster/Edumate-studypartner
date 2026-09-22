@@ -173,9 +173,10 @@ export class EmbeddingQueueService {
 
   private sanitizeErrorMessage(err: any): string {
     const raw = String(err?.message || 'Embedding processing error.');
-    const cleaned = raw.replace(/\/[a-zA-Z0-9_\.\-]+/g, '').trim();
+    const cleaned = raw.replace(/[\r\n\t]+/g, ' ').trim();
     return cleaned.slice(0, 200);
   }
 }
 
 export const embeddingQueueService = new EmbeddingQueueService();
+
