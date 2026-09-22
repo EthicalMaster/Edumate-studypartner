@@ -90,7 +90,9 @@ export const QuizPaperPreview: React.FC<QuizPaperPreviewProps> = ({
             {quiz.title}
           </h1>
           <p className="text-[13px] text-[#75777e]">
-            Official curriculum question paper compiled from PostgreSQL question repository.
+            {quiz.source === 'uploaded_material'
+              ? 'AI-grounded assessment synthesized from your uploaded lecture notes with chunk-level citations.'
+              : 'Official curriculum question paper compiled from PostgreSQL question repository.'}
           </p>
         </div>
 

@@ -55,6 +55,7 @@ export const QuizQuestionGenerationSchema = z.object({
   explanation: z.string().min(5),
   formulaHint: z.string().optional(),
   difficulty: z.enum(['easy', 'medium', 'hard']),
+  chunkId: z.string().optional(),
 });
 
 export const QuizQuestionBatchGenerationSchema = z.object({

@@ -315,6 +315,8 @@ export interface QuestionReviewItem {
   explanation: string;
   formula_hint: string | null;
   options: { id: string; text: string }[];
+  material_id?: string | null;
+  chunk_id?: string | null;
 }
 
 export interface QuizResult {

@@ -24,6 +24,8 @@ export interface QuestionReviewItem {
   explanation: string;
   formula_hint: string | null;
   options: { id: string; text: string }[];
+  material_id?: string | null;
+  chunk_id?: string | null;
 }
 
 export interface DetailedQuizResult {
@@ -290,6 +292,8 @@ export class ScoringService {
         explanation: q.explanation || '',
         formula_hint: q.formula_hint || null,
         options: q.options || [],
+        material_id: q.material_id || null,
+        chunk_id: q.chunk_id || null,
       });
     }
 
@@ -559,6 +563,8 @@ export class ScoringService {
         explanation: q.explanation || '',
         formula_hint: q.formula_hint || null,
         options: q.options || [],
+        material_id: q.material_id || null,
+        chunk_id: q.chunk_id || null,
       });
     }
 

@@ -21,6 +21,7 @@ export type AIRequestPurpose =
   | 'general'
   | 'tutoring'
   | 'quiz_explanation'
+  | 'quiz_generation'
   | 'retrieval_qa'
   | 'diagnostic'
   | 'test';

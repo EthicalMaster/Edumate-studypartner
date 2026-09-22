@@ -24,6 +24,7 @@
     "test:retrieval": "tsx server/test/retrieval.test.ts",
     "test:ai": "tsx server/test/ai-gateway.test.ts",
     "test:groq": "tsx server/test/groq-provider.test.ts",
+    "test:quiz-material": "tsx server/test/phase10a-quiz-material.test.ts",
     "test:analytics": "tsx server/test/analytics.test.ts",
     "test:runner": "tsx server/test/python-runner.test.ts",
     "test:load": "tsx server/test/load.test.ts",

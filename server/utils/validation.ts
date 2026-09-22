@@ -320,12 +320,14 @@ export const createQuizSchema = z.object({
           )
           .default([]),
         correct_option_ids: z.array(z.string()).default([]),
-        correct_answer_text: z.string().optional(),
+        correct_answer_text: z.string().optional().nullable(),
         explanation: z.string().default(''),
-        formula_hint: z.string().optional(),
+        formula_hint: z.string().optional().nullable(),
         marks: z.coerce.number().min(0.5).max(50).default(1),
         section: z.string().default('Section A'),
         topic: z.string().optional(),
+        material_id: z.string().uuid().optional().nullable(),
+        chunk_id: z.string().uuid().optional().nullable(),
       })
     )
     .optional(),
@@ -357,8 +359,23 @@ export const submitQuizSchema = z.object({
     .default('manual_submit'),
 });
 
+export const generateQuizFromMaterialSchema = z.object({
+  material_id: z.string().uuid({ message: 'A valid Study Material UUID is required' }),
+  title: z.string().trim().max(255).optional(),
+  mode: z.enum(['PRACTICE', 'EXAM']).default('PRACTICE'),
+  question_count: z.coerce.number().int().min(1).max(30).default(5),
+  time_limit_minutes: z.coerce.number().int().min(1).max(180).default(15),
+  difficulty: z.enum(['easy', 'medium', 'hard']).default('medium'),
+  topic_focus: z.string().trim().max(150).optional(),
+  negative_marking: z.boolean().default(false),
+  negative_mark_value: z.coerce.number().min(0).max(5).default(0),
+  randomization: z.boolean().default(true),
+});
+
 export type CreateQuizInput = z.infer<typeof createQuizSchema>;
 export type CreateQuizSessionInput = z.infer<typeof createQuizSessionSchema>;
 export type SubmitAnswerInput = z.infer<typeof submitAnswerSchema>;
 export type SubmitQuizInput = z.infer<typeof submitQuizSchema>;
+export type GenerateQuizFromMaterialInputSchema = z.infer<typeof generateQuizFromMaterialSchema>;
+
 

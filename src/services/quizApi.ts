@@ -32,6 +32,19 @@ export interface CreateQuizParams {
   sections?: string[];
 }
 
+export interface GenerateQuizFromMaterialParams {
+  material_id: string;
+  title?: string;
+  mode: QuizMode;
+  question_count: number;
+  time_limit_minutes: number;
+  difficulty: string;
+  topic_focus?: string;
+  negative_marking: boolean;
+  negative_mark_value: number;
+  randomization: boolean;
+}
+
 export interface SessionStateResponse {
   session: QuizSession;
   quiz: {
@@ -125,6 +138,28 @@ export const quizApi = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.message || 'Failed to generate quiz paper');
+    }
+    return res.json();
+  },
+
+  /**
+   * Generate an AI quiz directly from uploaded study material.
+   */
+  async generateQuizFromMaterial(
+    params: GenerateQuizFromMaterialParams
+  ): Promise<{ quiz: Quiz; questions: SafeQuizQuestion[] }> {
+    const res = await fetch('/api/quizzes/generate-from-material', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to generate quiz from study material');
     }
     return res.json();
   },

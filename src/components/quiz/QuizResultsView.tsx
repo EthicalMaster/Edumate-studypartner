@@ -416,6 +416,13 @@ export const QuizResultsView: React.FC<QuizResultsViewProps> = ({
                       <strong>Formula / Key Identity:</strong> {item.formula_hint}
                     </div>
                   )}
+                  {item.chunk_id && (
+                    <div className="mt-2.5 pt-2 border-t border-slate-200/80 flex items-center gap-1.5 text-[11px] text-[#0051d5]">
+                      <span className="material-symbols-outlined text-[14px]">link</span>
+                      <span className="font-semibold">Sourced from uploaded study material citation</span>
+                      <span className="text-[#75777e] font-mono">({item.chunk_id.slice(0, 8)}...)</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
