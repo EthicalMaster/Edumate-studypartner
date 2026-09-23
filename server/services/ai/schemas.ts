@@ -13,6 +13,7 @@
 
 import { z } from 'zod';
 import { AIStructuredOutputError } from './errors.js';
+import type { AIJsonSchemaSpec } from './types.js';
 
 // ==============================================================================
 // 1. GENERIC GENERATION RESULT SCHEMA
@@ -42,30 +43,109 @@ export type GenericGenerationResult = z.infer<typeof GenericGenerationResultSche
 // ==============================================================================
 
 export const QuizOptionSchema = z.object({
-  id: z.string().min(1),
-  text: z.string().min(1),
+  id: z.string().min(1, 'Option ID must not be empty'),
+  text: z.string().min(1, 'Option text must not be empty'),
 });
 
-export const QuizQuestionGenerationSchema = z.object({
-  subject: z.string().min(1),
-  topic: z.string().min(1),
-  question: z.string().min(3),
-  options: z.array(QuizOptionSchema).min(2).max(6),
-  correctOptionId: z.string().min(1),
-  explanation: z.string().min(5),
-  formulaHint: z.string().optional(),
-  difficulty: z.enum(['easy', 'medium', 'hard']),
-  chunkId: z.string().optional(),
-});
+export const QuizQuestionGenerationSchema = z
+  .object({
+    subject: z.string().min(1, 'Subject is required'),
+    topic: z.string().min(1, 'Topic is required'),
+    question: z.string().min(3, 'Question text must be at least 3 characters'),
+    questionType: z.literal('MCQ', {
+      message: 'Invalid question type: only MCQ is supported in Phase 10A',
+    }).default('MCQ'),
+    options: z
+      .array(QuizOptionSchema)
+      .min(2, 'At least 2 options are required')
+      .max(6, 'At most 6 options are allowed'),
+    correctOptionId: z.string().min(1, 'correctOptionId is required'),
+    explanation: z.string().min(5, 'Explanation must be at least 5 characters'),
+    formulaHint: z.string().nullable().optional(),
+    difficulty: z.enum(['easy', 'medium', 'hard']),
+    marks: z.number().min(0.5).max(50).default(1),
+    section: z.string().default('Section A'),
+    chunkId: z.string().min(1, 'chunkId provenance is required'),
+    materialId: z.string().optional().nullable(),
+  })
+  .refine(
+    (q) => q.options.some((opt) => opt.id === q.correctOptionId),
+    {
+      message: 'correctOptionId must match one of the provided option IDs',
+      path: ['correctOptionId'],
+    }
+  );
 
 export const QuizQuestionBatchGenerationSchema = z.object({
-  title: z.string().min(1),
-  subject: z.string().min(1),
-  topic: z.string().min(1),
-  questions: z.array(QuizQuestionGenerationSchema).min(1),
+  title: z.string().min(1, 'Quiz title is required'),
+  subject: z.string().min(1, 'Quiz subject is required'),
+  topic: z.string().min(1, 'Quiz topic is required'),
+  questions: z
+    .array(QuizQuestionGenerationSchema)
+    .min(1, 'Quiz must contain at least one question'),
 });
 
 export type QuizQuestionGenerated = z.infer<typeof QuizQuestionGenerationSchema>;
+export type QuizQuestionBatchGenerated = z.infer<typeof QuizQuestionBatchGenerationSchema>;
+
+/**
+ * Canonical JSON schema spec used for provider-level structured enforcement (e.g. Groq json_schema).
+ */
+export const QUIZ_BATCH_JSON_SCHEMA: AIJsonSchemaSpec = {
+  name: 'quiz_question_batch',
+  description: 'A grounded assessment quiz batch with metadata and provenance-tracked questions',
+  strict: false,
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'Title of the assessment quiz' },
+      subject: { type: 'string', description: 'Academic subject' },
+      topic: { type: 'string', description: 'Topic covered by the quiz' },
+      questions: {
+        type: 'array',
+        description: 'Array of grounded MCQ questions',
+        items: {
+          type: 'object',
+          properties: {
+            question: { type: 'string', description: 'Question text statement' },
+            questionType: { type: 'string', enum: ['MCQ'], description: 'Must be MCQ' },
+            options: {
+              type: 'array',
+              description: '4 options labeled A, B, C, D',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', description: 'Option identifier (A, B, C, D)' },
+                  text: { type: 'string', description: 'Option text' },
+                },
+                required: ['id', 'text'],
+              },
+            },
+            correctOptionId: { type: 'string', description: 'ID of correct option (matches an option id)' },
+            explanation: { type: 'string', description: 'Pedagogical explanation grounded in source excerpt' },
+            formulaHint: { type: ['string', 'null'], description: 'Optional formula hint or null' },
+            difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
+            marks: { type: 'number', description: 'Marks awarded for correct answer' },
+            section: { type: 'string', description: 'Section name' },
+            subject: { type: 'string', description: 'Subject' },
+            topic: { type: 'string', description: 'Topic' },
+            chunkId: { type: 'string', description: 'Exact ChunkID from source excerpt' },
+          },
+          required: [
+            'question',
+            'questionType',
+            'options',
+            'correctOptionId',
+            'explanation',
+            'difficulty',
+            'chunkId',
+          ],
+        },
+      },
+    },
+    required: ['title', 'subject', 'topic', 'questions'],
+  },
+};
 
 // ==============================================================================
 // 3. FLASHCARD GENERATION SCHEMA

@@ -506,6 +506,7 @@ async function runAllTests() {
       correctOptionId: 'b',
       explanation: 'The Krebs cycle occurs in the mitochondrial matrix of eukaryotic cells.',
       difficulty: 'medium' as const,
+      chunkId: 'chunk-123',
     };
     const parsed = QuizQuestionGenerationSchema.parse(validQuiz);
     assert.strictEqual(parsed.options.length, 4);
@@ -641,6 +642,72 @@ async function runAllTests() {
       // Re-register clean Groq provider
       providerRegistry.registerProvider(new GroqProvider());
     }
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST 15: Groq Provider request format verification (json_schema & json_object)
+  // --------------------------------------------------------------------------
+  await test('15. GroqProvider constructs valid OpenAI/Groq structured output payload', async () => {
+    let capturedPayload: any = null;
+
+    const mockFetch: typeof fetch = async (_url, options) => {
+      capturedPayload = JSON.parse(options?.body as string);
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-schema-1',
+          model: 'llama-3.3-70b-versatile',
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: JSON.stringify({
+                  title: 'Sample Quiz',
+                  subject: 'Physics',
+                  topic: 'Motion',
+                  questions: [],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    };
+
+    const groq = new GroqProvider({ apiKey: 'test-key', fetchFn: mockFetch });
+
+    // 15a: Test json_schema payload
+    await groq.generate({
+      requestId: 'test-req-schema',
+      studentId: 'student-test',
+      purpose: 'quiz_generation',
+      prompt: 'Generate a quiz',
+      responseFormat: 'json_schema',
+      jsonSchema: {
+        name: 'quiz_test_schema',
+        strict: false,
+        schema: { type: 'object', properties: { title: { type: 'string' } } },
+      },
+    });
+
+    assert(capturedPayload, 'Payload must be sent to fetch');
+    assert.strictEqual(capturedPayload.model, 'llama-3.3-70b-versatile');
+    assert.strictEqual(capturedPayload.response_format?.type, 'json_schema');
+    assert.strictEqual(capturedPayload.response_format?.json_schema?.name, 'quiz_test_schema');
+    assert.strictEqual(capturedPayload.response_format?.json_schema?.strict, false);
+
+    // 15b: Test json_object payload
+    await groq.generate({
+      requestId: 'test-req-json-obj',
+      studentId: 'student-test',
+      purpose: 'general',
+      prompt: 'Generate JSON object',
+      responseFormat: 'json_object',
+    });
+
+    assert.strictEqual(capturedPayload.response_format?.type, 'json_object');
   });
 
   // --------------------------------------------------------------------------

@@ -48,6 +48,16 @@ export interface RetrievedContext {
 }
 
 /**
+ * Provider-agnostic JSON schema specification for structured generation.
+ */
+export interface AIJsonSchemaSpec {
+  name: string;
+  description?: string;
+  strict?: boolean;
+  schema: Record<string, any>;
+}
+
+/**
  * Normalized application-level AI Request.
  */
 export interface AIRequest {
@@ -67,8 +77,10 @@ export interface AIRequest {
   temperature?: number;
   /** Maximum generated tokens (clamped by server governance limits) */
   maxTokens?: number;
-  /** Optional response format enforcement ('text' or 'json_object') */
-  responseFormat?: 'text' | 'json_object';
+  /** Optional response format enforcement ('text', 'json_object', or 'json_schema') */
+  responseFormat?: 'text' | 'json_object' | 'json_schema';
+  /** Optional JSON schema specification when responseFormat is 'json_schema' */
+  jsonSchema?: AIJsonSchemaSpec;
   /** Optional caller metadata (no secrets allowed) */
   metadata?: Record<string, any>;
 }

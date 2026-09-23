@@ -270,7 +270,7 @@ export const createQuizSchema = z.object({
     .max(200, { message: 'Title must not exceed 200 characters' }),
   description: z.string().trim().max(1000).optional().nullable(),
   mode: z.enum(['PRACTICE', 'EXAM', 'practice', 'exam']).default('PRACTICE'),
-  source: z.enum(['question_bank', 'topic', 'subject', 'uploaded_material']).default('question_bank'),
+  source: z.enum(['question_bank', 'topic', 'subject', 'uploaded_material', 'curriculum']).default('question_bank'),
   subject: z
     .string()
     .trim()
@@ -285,9 +285,8 @@ export const createQuizSchema = z.object({
     .coerce
     .number()
     .int()
-    .refine((val) => [5, 10, 15, 20, 30, 50].includes(val), {
-      message: 'Question count must be 5, 10, 15, 20, 30, or 50',
-    }),
+    .min(1, { message: 'Question count must be at least 1' })
+    .max(100, { message: 'Question count cannot exceed 100' }),
   time_limit_minutes: z
     .coerce
     .number()

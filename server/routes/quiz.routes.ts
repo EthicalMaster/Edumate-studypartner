@@ -18,6 +18,7 @@ import { quizSessionRepository } from '../repositories/quiz_session.repository.j
 import { scoringService } from '../services/scoring.service.js';
 import { analyticsRepository } from '../repositories/analytics.repository.js';
 import { quizGenerationService } from '../services/quiz/quiz-generation.service.js';
+import { AIGatewayError } from '../services/ai/errors.js';
 
 export const quizRouter = Router();
 
@@ -178,8 +179,21 @@ quizRouter.post(
         res.status(400).json({ error: 'INSUFFICIENT_CONTENT', message: msg.replace('INSUFFICIENT_CONTENT: ', '') });
         return;
       }
+      if (msg.startsWith('AI_PROVENANCE_FAILED') || msg.startsWith('AI_GENERATION_FAILED')) {
+        const [errCode, ...rest] = msg.split(': ');
+        res.status(422).json({ error: errCode, message: rest.join(': ') });
+        return;
+      }
       if (err.code === 'QUOTA_EXCEEDED' || err.statusCode === 429) {
         res.status(429).json({ error: 'QUOTA_EXCEEDED', message: err.message });
+        return;
+      }
+      if (err instanceof AIGatewayError || (err.statusCode && err.code)) {
+        res.status(err.statusCode || 502).json({
+          error: err.code || 'AI_GATEWAY_ERROR',
+          message: err.safeMessage || err.message,
+          ...(err.details ? { details: err.details } : {}),
+        });
         return;
       }
 

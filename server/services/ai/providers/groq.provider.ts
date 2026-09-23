@@ -137,7 +137,17 @@ export class GroqProvider implements IAIProvider {
       stream: false,
     };
 
-    if (request.responseFormat === 'json_object') {
+    if (request.responseFormat === 'json_schema' && request.jsonSchema) {
+      payload.response_format = {
+        type: 'json_schema',
+        json_schema: {
+          name: request.jsonSchema.name,
+          ...(request.jsonSchema.description ? { description: request.jsonSchema.description } : {}),
+          strict: request.jsonSchema.strict ?? false,
+          schema: request.jsonSchema.schema,
+        },
+      };
+    } else if (request.responseFormat === 'json_object' || request.responseFormat === 'json_schema') {
       payload.response_format = { type: 'json_object' };
     }
 
@@ -157,6 +167,30 @@ export class GroqProvider implements IAIProvider {
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
+
+      // If json_schema is rejected by model/endpoint with HTTP 400, retry once with json_object mode
+      if (res.status === 400 && payload.response_format?.type === 'json_schema') {
+        const fallbackPayload = {
+          ...payload,
+          response_format: { type: 'json_object' },
+        };
+        try {
+          const fallbackRes = await this.fetchFn(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${this.apiKey}`,
+            },
+            body: JSON.stringify(fallbackPayload),
+            signal: controller.signal,
+          });
+          if (fallbackRes.ok) {
+            res = fallbackRes;
+          }
+        } catch {
+          // Ignore fallback network error and allow main error handling to run
+        }
+      }
     } catch (err: any) {
       if (err.name === 'AbortError' || err.message?.includes('aborted')) {
         throw new AIProviderTimeoutError(`Groq generation request timed out after ${this.timeoutMs}ms.`);
@@ -213,7 +247,7 @@ export class GroqProvider implements IAIProvider {
 
     // 5. Handle structured JSON if requested
     let parsedJson: any = undefined;
-    if (request.responseFormat === 'json_object') {
+    if (request.responseFormat === 'json_object' || request.responseFormat === 'json_schema') {
       try {
         parsedJson = JSON.parse(generatedText);
       } catch (err: any) {

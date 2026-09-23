@@ -27,6 +27,7 @@ import type {
   AIRequestPurpose,
   RetrievedContext,
   AIDiagnostics,
+  AIJsonSchemaSpec,
 } from './types.js';
 import {
   AIGatewayError,
@@ -53,7 +54,8 @@ export interface ExecuteAIInput {
   retrievedContext?: RetrievedContext[];
   temperature?: number;
   maxTokens?: number;
-  responseFormat?: 'text' | 'json_object';
+  responseFormat?: 'text' | 'json_object' | 'json_schema';
+  jsonSchema?: AIJsonSchemaSpec;
   metadata?: Record<string, any>;
 }
 
@@ -175,6 +177,7 @@ export class AIGatewayService {
       temperature: typeof input.temperature === 'number' ? Math.max(0, Math.min(1, input.temperature)) : 0.7,
       maxTokens: sanitizedMaxTokens,
       responseFormat: input.responseFormat,
+      jsonSchema: input.jsonSchema,
       metadata: input.metadata,
     };
 
@@ -267,11 +270,13 @@ export class AIGatewayService {
    */
   public async executeStructured<T>(
     input: Omit<ExecuteAIInput, 'responseFormat'>,
-    schema: z.ZodType<T>
+    schema: z.ZodType<T>,
+    jsonSchemaSpec?: AIJsonSchemaSpec
   ): Promise<{ response: AIResponse; data: T }> {
     const response = await this.execute({
       ...input,
-      responseFormat: 'json_object',
+      responseFormat: jsonSchemaSpec ? 'json_schema' : 'json_object',
+      jsonSchema: jsonSchemaSpec,
     });
 
     const data = validateStructuredOutput(schema, response.text);

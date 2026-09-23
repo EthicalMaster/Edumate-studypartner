@@ -8,7 +8,10 @@ import { documentRepository } from '../../repositories/document.repository.js';
 import { retrievalService } from '../retrieval/retrieval.service.js';
 import { aiGatewayService } from '../ai/gateway.service.js';
 import { quizRepository } from '../../repositories/quiz.repository.js';
-import { QuizQuestionBatchGenerationSchema } from '../ai/schemas.js';
+import {
+  QuizQuestionBatchGenerationSchema,
+  QUIZ_BATCH_JSON_SCHEMA,
+} from '../ai/schemas.js';
 import type { QuizMode } from '../../../src/types.js';
 
 export interface GenerateQuizFromMaterialInput {
@@ -23,6 +26,28 @@ export interface GenerateQuizFromMaterialInput {
   negativeMarking?: boolean;
   negativeMarkValue?: number;
   randomization?: boolean;
+}
+
+/**
+ * Strict provenance filter guardrail:
+ * - valid retrieved chunkId -> accept
+ * - missing chunkId -> reject
+ * - unknown / hallucinated chunkId -> reject
+ * Does NOT silently re-map or substitute another chunk ID.
+ */
+export function filterQuestionsByProvenance<T extends { chunkId?: string | null }>(
+  questions: T[],
+  validChunkIds: Set<string>
+): T[] {
+  return questions.filter((q) => {
+    if (!q.chunkId || !validChunkIds.has(q.chunkId)) {
+      console.warn(
+        `[QuizGenerationService] Quarantined question due to invalid/hallucinated chunk provenance (chunkId="${q.chunkId}")`
+      );
+      return false;
+    }
+    return true;
+  });
 }
 
 export class QuizGenerationService {
@@ -119,39 +144,66 @@ export class QuizGenerationService {
 
     // 4. Construct context text and chunk lookup
     const validChunkIds = new Set(chunks.map((c) => c.id));
-    const defaultChunkId = chunks[0]?.id || null;
 
     const formattedContext = chunks
       .slice(0, 10)
       .map((c, i) => `[Source Chunk ${i + 1} | ChunkID: ${c.id}${c.pageStart ? ` | Pages: ${c.pageStart}-${c.pageEnd}` : ''}]\n${c.text.trim()}`)
       .join('\n\n---\n\n');
 
+    const expectedTitle = title?.trim() || `${material.title} • AI Assessment`;
+    const expectedSubject = material.subject;
+    const expectedTopic = material.topic || topicFocus || material.title;
+
     const prompt = `You are EDUMATE's Senior Academic Assessment Specialist.
 Generate an academically rigorous, strictly grounded quiz with exactly ${questionCount} multiple-choice questions based ONLY on the provided study material excerpt.
 
 STUDY MATERIAL:
 Title: "${material.title}"
-Subject: "${material.subject}"
-Topic: "${material.topic || topicFocus || 'Comprehensive Review'}"
+Subject: "${expectedSubject}"
+Topic: "${expectedTopic}"
 Target Difficulty: "${difficulty}"
 
 SOURCE CONTEXT EXCERPTS:
 ${formattedContext}
 
-STRICT ASSESSMENT REQUIREMENTS:
-1. Generate exactly ${questionCount} multiple-choice questions.
-2. Every question MUST be directly answerable from and grounded in the source text above. Do NOT invent facts or hallucinate external theories.
-3. For each question, provide:
-   - "question": clear, unambiguous question statement.
-   - "options": 4 realistic options with unique IDs ("A", "B", "C", "D").
-   - "correctOptionId": ID of the single correct option.
-   - "explanation": a concise pedagogical rationale explaining why the correct option is true based on the source text.
-   - "formulaHint": optional mathematical or conceptual formula hint if relevant.
-   - "difficulty": "${difficulty}".
-   - "subject": "${material.subject}".
-   - "topic": "${material.topic || topicFocus || material.title}".
-   - "chunkId": The exact ChunkID from the source chunk above that directly supports this question.
-4. Output MUST conform strictly to the required JSON schema.`;
+STRICT JSON OUTPUT CONTRACT:
+You MUST respond with a single valid JSON object at the top level. Do NOT return a JSON array, markdown code fences, or conversational preambles.
+The JSON object MUST strictly adhere to this exact structure:
+{
+  "title": "${expectedTitle.replace(/"/g, '\\"')}",
+  "subject": "${expectedSubject.replace(/"/g, '\\"')}",
+  "topic": "${expectedTopic.replace(/"/g, '\\"')}",
+  "questions": [
+    {
+      "question": "Clear, unambiguous question statement",
+      "questionType": "MCQ",
+      "options": [
+        { "id": "A", "text": "Option A text" },
+        { "id": "B", "text": "Option B text" },
+        { "id": "C", "text": "Option C text" },
+        { "id": "D", "text": "Option D text" }
+      ],
+      "correctOptionId": "A",
+      "explanation": "Concise pedagogical rationale explaining why the correct option is true based on the source text excerpt",
+      "formulaHint": null,
+      "difficulty": "${difficulty}",
+      "marks": 1,
+      "section": "Section A",
+      "subject": "${expectedSubject.replace(/"/g, '\\"')}",
+      "topic": "${expectedTopic.replace(/"/g, '\\"')}",
+      "chunkId": "EXACT_CHUNK_ID_FROM_HEADER_ABOVE"
+    }
+  ]
+}
+
+STRICT PEDAGOGICAL & PROVENANCE RULES:
+1. Generate exactly ${questionCount} multiple-choice questions in the "questions" array.
+2. Every question MUST be directly answerable from and grounded in the source text excerpts. Do NOT hallucinate facts or external theories.
+3. Every question must have exactly 4 options with unique IDs ("A", "B", "C", "D").
+4. "correctOptionId" MUST exactly match one of the IDs in the "options" list ("A", "B", "C", or "D").
+5. "chunkId" MUST be copied verbatim from one of the [Source Chunk X | ChunkID: <id>] headers above that provides the evidence for the question.
+6. "questionType" MUST be "MCQ".
+7. Return ONLY the raw JSON object conforming to this specification.`;
 
     // 5. Generate with AI Gateway
     const { data } = await aiGatewayService.executeStructured(
@@ -172,38 +224,46 @@ STRICT ASSESSMENT REQUIREMENTS:
           topic: material.topic,
         })),
         temperature: 0.3,
-        maxTokens: 2500,
+        maxTokens: Math.max(2500, questionCount * 350),
       },
-      QuizQuestionBatchGenerationSchema
+      QuizQuestionBatchGenerationSchema,
+      QUIZ_BATCH_JSON_SCHEMA
     );
 
     if (!data.questions || data.questions.length === 0) {
       throw new Error('AI_GENERATION_FAILED: The AI provider failed to generate valid quiz questions.');
     }
 
-    // 6. Map and normalize generated questions with provenance
-    const customQuestions = data.questions.map((q, idx) => {
-      // Validate chunkId provenance
-      const assignedChunkId = q.chunkId && validChunkIds.has(q.chunkId) ? q.chunkId : defaultChunkId;
+    // 6. Map and normalize generated questions with strict provenance verification
+    // Strict provenance guardrail:
+    // - Valid retrieved chunkId -> accept
+    // - Missing chunkId -> reject
+    // - Unknown / hallucinated chunkId -> reject (quarantine question; do NOT silently remap or fallback)
+    const validQuestions = filterQuestionsByProvenance(data.questions, validChunkIds);
 
-      return {
-        question_text: q.question,
-        question_type: 'MCQ' as const,
-        options: q.options.map((opt) => ({
-          id: opt.id,
-          text: opt.text,
-        })),
-        correct_option_ids: [q.correctOptionId],
-        correct_answer_text: null,
-        explanation: q.explanation,
-        formula_hint: q.formulaHint || null,
-        marks: 1,
-        section: 'Section A',
-        topic: q.topic || material.topic || material.title,
-        material_id: materialId,
-        chunk_id: assignedChunkId,
-      };
-    });
+    if (validQuestions.length === 0) {
+      throw new Error(
+        'AI_PROVENANCE_FAILED: All generated questions failed provenance verification (hallucinated or unrecognized chunk IDs).'
+      );
+    }
+
+    const customQuestions = validQuestions.map((q) => ({
+      question_text: q.question,
+      question_type: 'MCQ' as const,
+      options: q.options.map((opt) => ({
+        id: opt.id,
+        text: opt.text,
+      })),
+      correct_option_ids: [q.correctOptionId],
+      correct_answer_text: null,
+      explanation: q.explanation,
+      formula_hint: q.formulaHint || null,
+      marks: q.marks || 1,
+      section: q.section || 'Section A',
+      topic: q.topic || expectedTopic,
+      material_id: materialId,
+      chunk_id: q.chunkId,
+    }));
 
     const quizTitle =
       title?.trim() ||
