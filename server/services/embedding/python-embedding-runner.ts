@@ -192,7 +192,7 @@ export class PythonEmbeddingRunner {
    */
   public async checkHealth(force = false): Promise<RunnerHealthInfo> {
     const now = Date.now();
-    if (!force && this.healthCheckPromise && now - this.lastHealthCheckTime < 60000) {
+    if (!force && this.healthCheckPromise && this.isHealthy && now - this.lastHealthCheckTime < 60000) {
       return this.healthCheckPromise;
     }
 
@@ -724,6 +724,8 @@ export class PythonEmbeddingRunner {
     }
 
     this.isHealthy = false;
+    this.healthCheckPromise = null;
+    this.lastHealthCheckTime = 0;
     console.log('[PythonEmbeddingRunner] Shutdown completed.');
   }
 }
