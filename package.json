@@ -13,6 +13,7 @@
     "db:migrate": "tsx server/db/migrate.ts",
     "db:rollback": "tsx server/db/migrate.ts --rollback",
     "db:seed": "tsx server/db/seed.ts",
+    "db:seed:curriculum": "tsx server/db/seeds/question_bank.seed.ts",
     "db:seed:questions": "tsx server/db/seeds/question_bank.seed.ts",
     "db:verify": "tsx server/db/verify.ts",
     "test": "npm run test:auth && npm run test:curriculum && npm run test:quiz && npm run test:leaderboard && npm run test:materials && npm run test:doc-intel && npm run test:retrieval && npm run test:ai && npm run test:analytics && npm run db:verify",

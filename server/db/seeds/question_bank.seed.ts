@@ -131,9 +131,8 @@ async function runStandalone() {
 
 // Execute if run directly from CLI
 const isDirectRun =
-  process.argv[1]?.includes('question_bank.seed') ||
-  process.argv[1]?.endsWith('question_bank.seed.ts') ||
-  process.argv[1]?.endsWith('question_bank.seed.js');
+  Boolean(process.argv[1]?.includes('question_bank.seed')) &&
+  !process.argv[1]?.includes('.test.');
 
 if (isDirectRun) {
   runStandalone();
