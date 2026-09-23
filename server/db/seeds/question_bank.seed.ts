@@ -5,19 +5,56 @@
 
 import 'dotenv/config';
 import type pg from 'pg';
-import { SEED_QUESTION_BANK } from './question_bank.data.js';
+import { ALL_CURRICULUM_QUESTIONS, validateCurriculumDataset } from './curriculum/index.js';
 
-export async function seedQuestionBank(client: pg.PoolClient | pg.Client): Promise<number> {
-  // Check if question_bank already has questions
-  const checkRes = await client.query('SELECT COUNT(*)::int AS count FROM question_bank');
-  if (checkRes.rows[0].count > 0) {
-    return checkRes.rows[0].count;
+export interface SeedOptions {
+  reset?: boolean;
+}
+
+export async function seedQuestionBank(
+  client: pg.PoolClient | pg.Client,
+  options?: SeedOptions
+): Promise<{ total: number; inserted: number; existing: number }> {
+  // Validate the dataset in-memory before touching the database
+  const validation = validateCurriculumDataset(ALL_CURRICULUM_QUESTIONS);
+  if (!validation.valid) {
+    const issueSummary = validation.issues
+      .slice(0, 5)
+      .map((i) => `[${i.subject} - ${i.topic}] (${i.field}): ${i.error}`)
+      .join('\n');
+    throw new Error(
+      `[Seed Error] Curriculum dataset validation failed with ${validation.issues.length} issues:\n${issueSummary}`
+    );
   }
 
-  console.log('[Seed] Seeding question_bank with curriculum questions...');
-  let inserted = 0;
+  // Handle optional reset
+  if (options?.reset) {
+    console.log('[Seed] Reset requested. Truncating question_bank table...');
+    await client.query('TRUNCATE TABLE question_bank RESTART IDENTITY CASCADE');
+  }
 
-  for (const q of SEED_QUESTION_BANK) {
+  // Fetch existing question fingerprints for idempotency
+  const existingRes = await client.query<{ subject: string; topic: string; question_text: string }>(
+    'SELECT subject, topic, question_text FROM question_bank'
+  );
+  const existingSet = new Set(
+    existingRes.rows.map((r) => `${r.subject}:::${r.topic}:::${r.question_text.trim()}`)
+  );
+
+  console.log(
+    `[Seed] Seeding question_bank. Dataset size: ${ALL_CURRICULUM_QUESTIONS.length}, Already in DB: ${existingSet.size}`
+  );
+
+  let inserted = 0;
+  let skipped = 0;
+
+  for (const q of ALL_CURRICULUM_QUESTIONS) {
+    const key = `${q.subject}:::${q.topic}:::${q.question_text.trim()}`;
+    if (existingSet.has(key)) {
+      skipped++;
+      continue;
+    }
+
     await client.query(
       `INSERT INTO question_bank (
         subject, topic, difficulty, question_type, question_text,
@@ -39,11 +76,18 @@ export async function seedQuestionBank(client: pg.PoolClient | pg.Client): Promi
         q.section,
       ]
     );
+    existingSet.add(key);
     inserted++;
   }
 
-  console.log(`[Seed] Seeded ${inserted} questions into question_bank.`);
-  return inserted;
+  const countRes = await client.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM question_bank');
+  const finalTotal = parseInt(countRes.rows[0].count, 10);
+
+  console.log(
+    `[Seed Complete] Successfully processed: ${inserted} newly inserted, ${skipped} already existed. Total questions in database: ${finalTotal}.`
+  );
+
+  return { total: finalTotal, inserted, existing: skipped };
 }
 
 // Standalone execution entrypoint for `npm run db:seed:questions`
@@ -54,18 +98,30 @@ async function runStandalone() {
     process.exit(1);
   }
 
+  const shouldReset = process.argv.includes('--reset') || process.argv.includes('--force');
+
   const { default: pg } = await import('pg');
   const client = new pg.Client({ connectionString });
-  
+
   try {
     await client.connect();
     console.log('====================================================');
-    console.log('EDUMATE QUESTION BANK SEED OPERATION');
+    console.log('EDUMATE EXPANDED CURRICULUM QUESTION BANK SEED');
     console.log('====================================================');
-    const totalCount = await seedQuestionBank(client);
-    console.log(`[Seed Complete] Question bank verified with ${totalCount} items.`);
+    if (shouldReset) {
+      console.log('Flag detected: --reset/--force enabled.');
+    }
+
+    await client.query('BEGIN');
+    const result = await seedQuestionBank(client, { reset: shouldReset });
+    await client.query('COMMIT');
+
+    console.log('====================================================');
+    console.log(`[Database Ready] Question Bank total: ${result.total} records`);
+    console.log('====================================================');
     process.exit(0);
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('[Seed Error] Failed to seed question bank:', err);
     process.exit(1);
   } finally {
