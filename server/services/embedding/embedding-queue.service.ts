@@ -111,6 +111,9 @@ export class EmbeddingQueueService {
       }));
       await embeddingRepository.upsertBatch(initRecords);
 
+      // Ensure real BGE embedding engine is ready before attempting the first embedding operation
+      await embeddingService.waitUntilReady();
+
       // 6. Process in bounded batches to preserve memory
       const batchSize = quotaService.getConfig().embeddingBatchSize;
       for (let i = 0; i < chunks.length; i += batchSize) {

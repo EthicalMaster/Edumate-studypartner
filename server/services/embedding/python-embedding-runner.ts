@@ -125,10 +125,8 @@ export class PythonEmbeddingRunner {
   private startupTimeoutMs: number = resolveStartupTimeoutMs();
 
   private constructor() {
-    // Perform initial non-blocking health check
-    this.checkHealth().catch((err) => {
-      console.warn(`[PythonEmbeddingRunner] Initial health probe check: ${err.message}`);
-    });
+    // Non-blocking constructor: does not spawn unnecessary probe by default.
+    // Deterministic readiness is gated via waitUntilReady() / ensureProcess().
   }
 
   public static getInstance(): PythonEmbeddingRunner {
@@ -151,7 +149,11 @@ export class PythonEmbeddingRunner {
   }
 
   public isAvailable(): boolean {
-    return this.isHealthy;
+    return this.isHealthy && Boolean(this.process && !this.process.killed && this.process.stdin?.writable);
+  }
+
+  public get isProcessStarting(): boolean {
+    return this.isStarting;
   }
 
   public getPythonPath(): string {
@@ -188,9 +190,40 @@ export class PythonEmbeddingRunner {
 
   /**
    * Health and capability probe: executes "python embedder.py --device".
+   * If the long-lived runner is active and healthy, returns current runner health immediately.
+   * If the long-lived runner is currently starting, awaits readiness instead of spawning duplicate probe.
    * Results are cached so it is NOT executed on every embedding request.
    */
   public async checkHealth(force = false): Promise<RunnerHealthInfo> {
+    if (!force && this.isHealthy && this.process && !this.process.killed && this.process.stdin?.writable) {
+      return {
+        isHealthy: true,
+        device: this.device,
+        model: this.modelName,
+        dimension: this.dimension,
+      };
+    }
+
+    if (!force && this.isStarting && this.startupPromise) {
+      try {
+        await this.startupPromise;
+        return {
+          isHealthy: this.isHealthy,
+          device: this.device,
+          model: this.modelName,
+          dimension: this.dimension,
+        };
+      } catch (err: any) {
+        return {
+          isHealthy: false,
+          device: this.device,
+          model: this.modelName,
+          dimension: this.dimension,
+          error: err.message,
+        };
+      }
+    }
+
     const now = Date.now();
     if (!force && this.healthCheckPromise && this.isHealthy && now - this.lastHealthCheckTime < 60000) {
       return this.healthCheckPromise;
@@ -209,7 +242,9 @@ export class PythonEmbeddingRunner {
 
       if (!fs.existsSync(scriptPath)) {
         if (this.lifecycleGeneration === probeGeneration) {
-          this.isHealthy = false;
+          if (!this.process || this.process.killed || !this.process.stdin?.writable) {
+            this.isHealthy = false;
+          }
         }
         return resolve({
           isHealthy: false,
@@ -232,7 +267,11 @@ export class PythonEmbeddingRunner {
           stdio: ['ignore', 'pipe', 'pipe'],
         });
       } catch (err: any) {
-        this.isHealthy = false;
+        if (this.lifecycleGeneration === probeGeneration) {
+          if (!this.process || this.process.killed || !this.process.stdin?.writable) {
+            this.isHealthy = false;
+          }
+        }
         return resolve({
           isHealthy: false,
           device: 'cpu',
@@ -251,7 +290,11 @@ export class PythonEmbeddingRunner {
           } catch {
             // Ignore
           }
-          this.isHealthy = false;
+          if (this.lifecycleGeneration === probeGeneration) {
+            if (!this.process || this.process.killed || !this.process.stdin?.writable) {
+              this.isHealthy = false;
+            }
+          }
           resolve({
             isHealthy: false,
             device: 'cpu',
@@ -274,7 +317,11 @@ export class PythonEmbeddingRunner {
         if (!settled) {
           settled = true;
           if (timer) clearTimeout(timer);
-          this.isHealthy = false;
+          if (this.lifecycleGeneration === probeGeneration) {
+            if (!this.process || this.process.killed || !this.process.stdin?.writable) {
+              this.isHealthy = false;
+            }
+          }
           resolve({
             isHealthy: false,
             device: 'cpu',
@@ -312,7 +359,9 @@ export class PythonEmbeddingRunner {
               });
             } catch (parseErr: any) {
               if (this.lifecycleGeneration === probeGeneration) {
-                this.isHealthy = false;
+                if (!this.process || this.process.killed || !this.process.stdin?.writable) {
+                  this.isHealthy = false;
+                }
               }
               return resolve({
                 isHealthy: false,
@@ -325,7 +374,9 @@ export class PythonEmbeddingRunner {
           }
 
           if (this.lifecycleGeneration === probeGeneration) {
-            this.isHealthy = false;
+            if (!this.process || this.process.killed || !this.process.stdin?.writable) {
+              this.isHealthy = false;
+            }
           }
           const errMsg = (stderr || stdout).trim() || `Process exited with code ${code}`;
           return resolve({
@@ -341,6 +392,31 @@ export class PythonEmbeddingRunner {
   }
 
   /**
+   * Waits for genuine BGE model readiness.
+   * Concurrent callers share the same startup promise.
+   * Respects EMBEDDING_STARTUP_TIMEOUT_MS.
+   */
+  public async waitUntilReady(): Promise<RunnerHealthInfo> {
+    if (this.isHealthy && this.process && !this.process.killed && this.process.stdin?.writable) {
+      return {
+        isHealthy: true,
+        device: this.device,
+        model: this.modelName,
+        dimension: this.dimension,
+      };
+    }
+
+    await this.ensureProcess();
+
+    return {
+      isHealthy: this.isHealthy,
+      device: this.device,
+      model: this.modelName,
+      dimension: this.dimension,
+    };
+  }
+
+  /**
    * Embeds an array of texts.
    * Serialized through the long-lived process FIFO queue.
    */
@@ -353,15 +429,9 @@ export class PythonEmbeddingRunner {
       return [];
     }
 
-    const health = await this.checkHealth();
-
-    if (!health.isHealthy) {
-      throw new Error(
-        health.error || 'Real BGE embedding engine is unavailable.'
-      );
+    if (!this.isHealthy || !this.process || this.process.killed || !this.process.stdin?.writable) {
+      await this.waitUntilReady();
     }
-
-    await this.ensureProcess();
 
     return new Promise<number[][]>((resolve, reject) => {
       this.requestQueue.push({
@@ -375,8 +445,8 @@ export class PythonEmbeddingRunner {
     });
   }
 
-  private async ensureProcess(): Promise<void> {
-    if (this.process && !this.process.killed && this.process.stdin?.writable) {
+  public async ensureProcess(): Promise<void> {
+    if (this.process && !this.process.killed && this.process.stdin?.writable && this.isHealthy) {
       return;
     }
 
@@ -385,18 +455,26 @@ export class PythonEmbeddingRunner {
     }
 
     this.isStarting = true;
-    this.startupPromise = this.startSubprocess();
+    const currentStartupPromise = this.startSubprocess();
+    this.startupPromise = currentStartupPromise;
 
     try {
-      await this.startupPromise;
+      await currentStartupPromise;
     } finally {
-      this.isStarting = false;
-      this.startupPromise = null;
+      if (this.startupPromise === currentStartupPromise) {
+        this.isStarting = false;
+        this.startupPromise = null;
+      }
     }
   }
 
   private startSubprocess(): Promise<void> {
+    const startupGen = this.lifecycleGeneration;
     return new Promise((resolve, reject) => {
+      if (this.lifecycleGeneration !== startupGen) {
+        return reject(new Error('PythonEmbeddingRunner startup cancelled: lifecycle invalidated.'));
+      }
+
       const pythonExe = this.getPythonPath();
       const scriptPath = this.getScriptPath();
 
@@ -465,6 +543,13 @@ export class PythonEmbeddingRunner {
                 if (parsed.ready === true) {
                   hasStarted = true;
                   cleanupStartup();
+
+                  if (this.lifecycleGeneration !== startupGen) {
+                    try {
+                      child.kill('SIGTERM');
+                    } catch {}
+                    return reject(new Error('PythonEmbeddingRunner startup cancelled: lifecycle invalidated.'));
+                  }
 
                   if (parsed.device === 'cuda' || parsed.device === 'cpu') {
                     this.device = parsed.device;
@@ -723,6 +808,8 @@ export class PythonEmbeddingRunner {
       q.reject(new Error('PythonEmbeddingRunner shutdown'));
     }
 
+    this.isStarting = false;
+    this.startupPromise = null;
     this.isHealthy = false;
     this.healthCheckPromise = null;
     this.lastHealthCheckTime = 0;

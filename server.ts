@@ -16,6 +16,7 @@ import { retrievalRouter } from './server/routes/retrieval.routes.js';
 import { aiRouter } from './server/routes/ai.routes.js';
 import { analyticsRouter } from './server/routes/analytics.routes.js';
 import { checkConnection } from './server/db/connection.js';
+import { pythonEmbeddingRunner } from './server/services/embedding/python-embedding-runner.js';
 
 // Server entry point
 
@@ -131,6 +132,11 @@ async function startServer() {
     } catch (err) {
       console.warn('[EDUMATE] Database health check warning:', err);
     }
+
+    // Asynchronously pre-warm the real BGE embedding engine without blocking HTTP or DB startup
+    pythonEmbeddingRunner.waitUntilReady().catch((err) => {
+      console.warn(`[EDUMATE] Asynchronous BGE embedding engine pre-warm warning: ${err.message}`);
+    });
   });
 }
 

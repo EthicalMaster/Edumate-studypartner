@@ -521,6 +521,148 @@ for line in sys.stdin:
       }
     });
 
+    // --------------------------------------------------------------------------
+    // 4. Phase 7 Hotfix: Deterministic Startup Lifecycle, Readiness & Gating
+    // --------------------------------------------------------------------------
+    console.log('\n--- 4. Phase 7 Hotfix: Deterministic Readiness & Gating ---');
+
+    await test('waitUntilReady waits for genuine BGE ready:true handshake', async () => {
+      runner.shutdown();
+      assert.strictEqual(runner.isAvailable(), false);
+      const readyInfo = await runner.waitUntilReady();
+      assert.strictEqual(readyInfo.isHealthy, true);
+      assert.strictEqual(readyInfo.device, 'cuda');
+      assert.strictEqual(readyInfo.model, 'BAAI/bge-small-en-v1.5');
+      assert.strictEqual(readyInfo.dimension, 384);
+      assert.strictEqual(runner.isAvailable(), true);
+    });
+
+    await test('Concurrent calls to waitUntilReady share a single startup promise and child process', async () => {
+      runner.shutdown();
+      assert.strictEqual(runner.isAvailable(), false);
+
+      // Launch 5 concurrent calls
+      const promises = [
+        runner.waitUntilReady(),
+        runner.waitUntilReady(),
+        runner.waitUntilReady(),
+        runner.waitUntilReady(),
+        runner.waitUntilReady(),
+      ];
+
+      const results = await Promise.all(promises);
+      for (const res of results) {
+        assert.strictEqual(res.isHealthy, true);
+        assert.strictEqual(res.device, 'cuda');
+        assert.strictEqual(res.dimension, 384);
+      }
+      assert.strictEqual(runner.isAvailable(), true);
+    });
+
+    await test('Embedding request queued while BGE is starting waits for readiness without failing', async () => {
+      runner.shutdown();
+      process.env.SIMULATE_SLOW_STARTUP = '1'; // 2.0s delay in mock python script
+      try {
+        // Kick off runner startup in background
+        const startupPromise = runner.waitUntilReady();
+        assert.strictEqual(runner.isProcessStarting, true);
+
+        // Service embed operation should wait for runner to finish starting
+        const service = new LocalBgeEmbeddingService(runner);
+        service.setAllowTestFallback(false);
+
+        const embedPromise = service.embedTexts(['Late arriving text while model is still booting']);
+
+        // Both should complete successfully
+        const [startupRes, embeddings] = await Promise.all([startupPromise, embedPromise]);
+        assert.strictEqual(startupRes.isHealthy, true);
+        assert.strictEqual(embeddings.length, 1);
+        assert.strictEqual(embeddings[0].length, 384);
+        assert.strictEqual(runner.isAvailable(), true);
+      } finally {
+        delete process.env.SIMULATE_SLOW_STARTUP;
+      }
+    });
+
+    await test('Successful CUDA readiness properly registers CUDA device', async () => {
+      assert.strictEqual(runner.getDevice(), 'cuda');
+      assert.strictEqual(runner.getModelName(), 'BAAI/bge-small-en-v1.5');
+      assert.strictEqual(runner.getDimension(), 384);
+    });
+
+    await test('Startup timeout cleanly rejects waitUntilReady without leaving runner healthy', async () => {
+      runner.shutdown();
+      process.env.SIMULATE_SLOW_STARTUP = '1';
+      runner.setStartupTimeoutMs(200); // 200ms timeout vs 2.0s delay
+      try {
+        let threw = false;
+        try {
+          await runner.waitUntilReady();
+        } catch (err: any) {
+          threw = true;
+          assert(err.message.includes('startup timed out after 200ms'));
+        }
+        assert.strictEqual(threw, true, 'waitUntilReady must reject on timeout');
+        assert.strictEqual(runner.isAvailable(), false);
+        assert.strictEqual(runner.isProcessStarting, false);
+      } finally {
+        delete process.env.SIMULATE_SLOW_STARTUP;
+        runner.setStartupTimeoutMs(120000);
+        runner.shutdown();
+      }
+    });
+
+    await test('Runner failure before ready:true rejects waitUntilReady cleanly', async () => {
+      runner.shutdown();
+      process.env.SIMULATE_EXIT_BEFORE_READY = '1';
+      try {
+        let threw = false;
+        try {
+          await runner.waitUntilReady();
+        } catch (err: any) {
+          threw = true;
+          assert(err.message.includes('failed to start') || err.message.includes('CUDA out of memory') || err.message.includes('exit code 137'));
+        }
+        assert.strictEqual(threw, true, 'waitUntilReady must reject if process exits before handshake');
+        assert.strictEqual(runner.isAvailable(), false);
+      } finally {
+        delete process.env.SIMULATE_EXIT_BEFORE_READY;
+        runner.shutdown();
+      }
+    });
+
+    await test('Shutdown terminates process, clears state, and invalidates lifecycle', async () => {
+      await runner.waitUntilReady();
+      assert.strictEqual(runner.isAvailable(), true);
+
+      runner.shutdown();
+      assert.strictEqual(runner.isAvailable(), false);
+      assert.strictEqual(runner.isProcessStarting, false);
+      assert.strictEqual((runner as any).process, null);
+    });
+
+    await test('No hash fallback: waitUntilReady failure rejects strictly when fallback disabled', async () => {
+      runner.shutdown();
+      const service = new LocalBgeEmbeddingService(runner);
+      service.setAllowTestFallback(false);
+
+      process.env.SIMULATE_EXIT_BEFORE_READY = '1';
+      try {
+        let threw = false;
+        try {
+          await service.waitUntilReady();
+        } catch {
+          threw = true;
+        }
+        assert.strictEqual(threw, true, 'service.waitUntilReady must reject when real runner fails and fallback is false');
+        assert.strictEqual(service.isFallback, false);
+        assert.strictEqual(service.isRealEngineReady, false);
+      } finally {
+        delete process.env.SIMULATE_EXIT_BEFORE_READY;
+        runner.shutdown();
+      }
+    });
+
     // Clean up mock script
     runner.shutdown();
   } finally {

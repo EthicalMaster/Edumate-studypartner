@@ -41,5 +41,10 @@ export interface IEmbeddingService {
    * Explicitly sets test fallback permission (used in tests or administrative override).
    */
   setAllowTestFallback(allow: boolean | null): void;
+
+  /**
+   * Waits for the real BGE embedding engine to complete startup and readiness handshake.
+   */
+  waitUntilReady(): Promise<boolean>;
 }
 

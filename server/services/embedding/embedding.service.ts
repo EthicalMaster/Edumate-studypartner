@@ -86,6 +86,22 @@ export class LocalBgeEmbeddingService implements IEmbeddingService {
   }
 
   /**
+   * Ensures the embedding engine is ready for inference.
+   * If fallback is allowed, returns true immediately.
+   * Otherwise waits for the real Python BGE runner to complete startup and readiness handshake.
+   */
+  public async waitUntilReady(): Promise<boolean> {
+    if (this.fallbackAllowed) {
+      return true;
+    }
+    if (this.isRealEngineReady) {
+      return true;
+    }
+    await this.runner.waitUntilReady();
+    return this.isRealEngineReady;
+  }
+
+  /**
    * Embeds an array of document chunks into normalized 384-dimensional vectors.
    */
   public async embedTexts(texts: string[]): Promise<number[][]> {
@@ -94,6 +110,14 @@ export class LocalBgeEmbeddingService implements IEmbeddingService {
     }
     if (texts.length === 0) {
       return [];
+    }
+
+    if (!this.isRealEngineReady && !this.fallbackAllowed && this.runner.isProcessStarting) {
+      try {
+        await this.runner.waitUntilReady();
+      } catch (err: any) {
+        console.error(`[EmbeddingService] Runner startup failed while waiting in embedTexts: ${err.message}`);
+      }
     }
 
     if (this.isRealEngineReady) {
@@ -120,6 +144,14 @@ export class LocalBgeEmbeddingService implements IEmbeddingService {
   public async embedQuery(text: string): Promise<number[]> {
     if (typeof text !== 'string') {
       throw new Error('Query must be a string.');
+    }
+
+    if (!this.isRealEngineReady && !this.fallbackAllowed && this.runner.isProcessStarting) {
+      try {
+        await this.runner.waitUntilReady();
+      } catch (err: any) {
+        console.error(`[EmbeddingService] Runner startup failed while waiting in embedQuery: ${err.message}`);
+      }
     }
 
     if (this.isRealEngineReady) {
