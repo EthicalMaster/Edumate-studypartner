@@ -51,15 +51,15 @@ The **EDUMATE AI Gateway** (`server/services/ai/`) provides a secure, vendor-neu
                 │    unknown providers     │   │  - Token/char boundaries │
                 └────────────┬─────────────┘   └──────────────────────────┘
                              │
-            ┌────────────────┴────────────────────────┬─────────────────────────┐
-            ▼                                         ▼                         ▼
-┌─────────────────────────┐               ┌─────────────────────────┐  ┌─────────────────────────┐
-│     NullAIProvider      │               │     LocalAIProvider     │  │      GroqProvider       │
-│  (Development / Null)   │               │   (Self-Hosted HTTP)    │  │ (Cloud High-Speed LLM)  │
-│  - provider="development"               │  - provider="local"     │  │  - provider="groq"      │
-│  - model="null"         │               │  - Boundary for Ollama/ │  │  - model="llama-3.3-   │
-│  - Deterministic status │               │    vLLM HTTP server     │  │    70b-versatile"       │
-└─────────────────────────┘               └─────────────────────────┘  └─────────────────────────┘
+            ┌────────────────┴────────────────────────┐
+            ▼                                         ▼
+┌─────────────────────────┐               ┌─────────────────────────┐
+│     NullAIProvider      │               │     LocalAIProvider     │
+│  (Development / Null)   │               │   (Self-Hosted HTTP)    │
+│  - provider="development"               │  - provider="local"     │
+│  - model="null"         │               │  - Boundary for Ollama/ │
+│  - Deterministic status │               │    vLLM HTTP server     │
+└─────────────────────────┘               └─────────────────────────┘
 ```
 
 ### Retrieval Layer vs. Generation Layer Architecture
@@ -69,20 +69,19 @@ A strict boundary is maintained between vector retrieval and text generation:
 ```
 EDUMATE Architecture
  └── AI Gateway
-      ├── Retrieval Layer (UNCHANGED)
+      ├── Retrieval Layer (Phase 7 - Intact & Active)
       │    ├── Document Intelligence (PDF extraction, hierarchical sectioning, chunking)
       │    ├── IEmbeddingService (BAAI/bge-small-en-v1.5, 384 dimensions)
       │    └── Vector Database (Qdrant collection edumate_documents)
       │
-      └── Generation Layer (Phase 9)
-           └── GroqProvider (/chat/completions, Llama 3.3 70B Versatile)
+      └── Generation Layer (Provider-Agnostic Abstraction)
+           └── IAIProvider Contract (Pluggable providers)
 ```
 
 **Key Architectural Invariants:**
-- Groq is **strictly an inference / generation provider**.
-- Groq **never** replaces, touches, or mimics BGE embeddings, Qdrant vector retrieval, or Document Intelligence.
-- Groq API keys reside exclusively on the server (`GROQ_API_KEY`). The browser client never communicates with Groq directly.
-- The AI Gateway remains completely model-agnostic, enabling future drop-in replacement with local models (Ollama, vLLM, RTX 3050 CUDA) without modifying EDUMATE feature logic.
+- Retrieval layer remains fully independent of any LLM generation provider.
+- Text embeddings and Qdrant vector search strictly use BAAI/bge-small-en-v1.5 (384 dimensions).
+- The AI Gateway remains completely model-agnostic, enabling future drop-in addition of generation models without modifying EDUMATE core feature logic.
 
 ---
 
@@ -248,17 +247,16 @@ To prevent brittle parsing of arbitrary natural language, EDUMATE utilizes typed
 
 ---
 
-## 10. Scope Discipline: What is in Phase 9 vs. Future Phases
+## 10. Scope Discipline: AI Gateway Architecture
 
-Phase 9 is strictly **Provider Infrastructure Only**:
-- **Included in Phase 9:**
-  - `GroqProvider` implementing `IAIProvider` contract.
+The AI Gateway provides:
+- **Pluggable Architecture:**
+  - `IAIProvider` interface contract.
   - `AIProviderRegistry` registration and dynamic resolution.
   - Strongly typed Zod schemas for structured educational output.
   - Authenticated test routes (`POST /api/ai/test` and `POST /api/ai/test/structured`).
-  - Normalized error handling, rate limiting, and timeout guards.
-  - Full automated verification test suite (`npm run test:groq`).
-- **Strictly Deferred to Subsequent Phases:**
-  - Do NOT connect Groq to Quiz Builder, uploaded PDFs, question generation, flashcards, summaries, Teacher AI, or Buddy AI yet.
-  - No end-user facing UI changes.
+  - Normalized error handling, quota governance, and timeout guards.
+- **Strictly Deferred to Dedicated Generation Phase:**
+  - Connecting generation providers to Quiz Builder, uploaded PDFs, question generation, flashcards, summaries, Teacher AI, or Buddy AI will occur in future dedicated generation phases once a dedicated generation provider is provisioned.
+  - The working BGE embedding and Qdrant retrieval layer operates independently.
 

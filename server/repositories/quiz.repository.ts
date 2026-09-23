@@ -42,8 +42,6 @@ export interface QuizQuestionRecord {
   marks: number;
   section: string;
   topic: string | null;
-  material_id?: string | null;
-  chunk_id?: string | null;
 }
 
 export interface SafeQuizQuestion {
@@ -56,8 +54,6 @@ export interface SafeQuizQuestion {
   marks: number;
   section: string;
   topic: string | null;
-  material_id?: string | null;
-  chunk_id?: string | null;
 }
 
 export interface QuestionBankMeta {
@@ -123,8 +119,7 @@ export class QuizRepository {
       `SELECT 
         id, quiz_id, question_order, question_text, question_type,
         options, correct_option_ids, correct_answer_text,
-        explanation, formula_hint, marks::float AS marks, section, topic,
-        material_id, chunk_id
+        explanation, formula_hint, marks::float AS marks, section, topic
       FROM quiz_questions
       WHERE quiz_id = $1
       ORDER BY question_order ASC`,
@@ -158,8 +153,6 @@ export class QuizRepository {
           marks: Number(row.marks) || 1,
           section: row.section || 'Section A',
           topic: row.topic,
-          material_id: row.material_id || null,
-          chunk_id: row.chunk_id || null,
         } as QuizQuestionRecord;
       }
 
@@ -174,8 +167,6 @@ export class QuizRepository {
         marks: Number(row.marks) || 1,
         section: row.section || 'Section A',
         topic: row.topic,
-        material_id: row.material_id || null,
-        chunk_id: row.chunk_id || null,
       } as SafeQuizQuestion;
     });
   }
@@ -277,8 +268,6 @@ export class QuizRepository {
         marks: number;
         section: string;
         topic: string | null;
-        material_id?: string | null;
-        chunk_id?: string | null;
       }> = [];
 
       if (input.custom_questions && input.custom_questions.length > 0) {
@@ -293,8 +282,6 @@ export class QuizRepository {
           marks: q.marks || 1,
           section: q.section || 'Section A',
           topic: q.topic || input.topic,
-          material_id: q.material_id || null,
-          chunk_id: q.chunk_id || null,
         }));
       } else {
         // Query matching questions from question_bank
@@ -401,10 +388,9 @@ export class QuizRepository {
           `INSERT INTO quiz_questions (
             quiz_id, question_order, question_text, question_type,
             options, correct_option_ids, correct_answer_text,
-            explanation, formula_hint, marks, section, topic,
-            material_id, chunk_id
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-          RETURNING id, quiz_id, question_order, question_text, question_type, options, marks::float AS marks, section, topic, material_id, chunk_id`,
+            explanation, formula_hint, marks, section, topic
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          RETURNING id, quiz_id, question_order, question_text, question_type, options, marks::float AS marks, section, topic`,
           [
             quiz.id,
             i + 1,
@@ -418,8 +404,6 @@ export class QuizRepository {
             q.marks,
             q.section,
             q.topic,
-            q.material_id || null,
-            q.chunk_id || null,
           ]
         );
 
@@ -434,8 +418,6 @@ export class QuizRepository {
           marks: Number(createdQ.marks),
           section: createdQ.section,
           topic: createdQ.topic,
-          material_id: createdQ.material_id || null,
-          chunk_id: createdQ.chunk_id || null,
         });
       }
 

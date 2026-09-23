@@ -11,14 +11,11 @@ import {
   createQuizSessionSchema,
   submitAnswerSchema,
   submitQuizSchema,
-  generateQuizFromMaterialSchema,
 } from '../utils/validation.js';
 import { quizRepository } from '../repositories/quiz.repository.js';
 import { quizSessionRepository } from '../repositories/quiz_session.repository.js';
 import { scoringService } from '../services/scoring.service.js';
 import { analyticsRepository } from '../repositories/analytics.repository.js';
-import { quizGenerationService } from '../services/quiz/quiz-generation.service.js';
-import { AIGatewayError } from '../services/ai/errors.js';
 
 export const quizRouter = Router();
 
@@ -121,90 +118,6 @@ quizRouter.post('/', validateBody(createQuizSchema), async (req: Request, res: R
     res.status(500).json({ error: 'INTERNAL_ERROR', message: err.message || 'Failed to create quiz paper.' });
   }
 });
-
-/**
- * POST /api/quizzes/generate-from-material
- * Generate an AI-grounded quiz directly from uploaded study material.
- * Strict student isolation, quota enforcement, and chunk provenance.
- */
-quizRouter.post(
-  '/generate-from-material',
-  validateBody(generateQuizFromMaterialSchema),
-  async (req: Request, res: Response) => {
-    try {
-      const studentId = getStudentProfileId(req);
-      const {
-        material_id,
-        title,
-        mode,
-        question_count,
-        time_limit_minutes,
-        difficulty,
-        topic_focus,
-        negative_marking,
-        negative_mark_value,
-        randomization,
-      } = req.body;
-
-      const created = await quizGenerationService.generateQuizFromMaterial({
-        studentId,
-        materialId: material_id,
-        title,
-        mode,
-        questionCount: question_count,
-        timeLimitMinutes: time_limit_minutes,
-        difficulty,
-        topicFocus: topic_focus,
-        negativeMarking: negative_marking,
-        negativeMarkValue: negative_mark_value,
-        randomization,
-      });
-
-      res.status(201).json(created);
-    } catch (err: any) {
-      const msg = err.message || '';
-      if (msg.startsWith('UNAUTHORIZED')) {
-        res.status(401).json({ error: 'UNAUTHORIZED', message: msg });
-        return;
-      }
-      if (msg.startsWith('NOT_FOUND')) {
-        res.status(404).json({ error: 'NOT_FOUND', message: msg.replace('NOT_FOUND: ', '') });
-        return;
-      }
-      if (msg.startsWith('MATERIAL_NOT_READY')) {
-        res.status(400).json({ error: 'MATERIAL_NOT_READY', message: msg.replace('MATERIAL_NOT_READY: ', '') });
-        return;
-      }
-      if (msg.startsWith('INSUFFICIENT_CONTENT')) {
-        res.status(400).json({ error: 'INSUFFICIENT_CONTENT', message: msg.replace('INSUFFICIENT_CONTENT: ', '') });
-        return;
-      }
-      if (msg.startsWith('AI_PROVENANCE_FAILED') || msg.startsWith('AI_GENERATION_FAILED')) {
-        const [errCode, ...rest] = msg.split(': ');
-        res.status(422).json({ error: errCode, message: rest.join(': ') });
-        return;
-      }
-      if (err.code === 'QUOTA_EXCEEDED' || err.statusCode === 429) {
-        res.status(429).json({ error: 'QUOTA_EXCEEDED', message: err.message });
-        return;
-      }
-      if (err instanceof AIGatewayError || (err.statusCode && err.code)) {
-        res.status(err.statusCode || 502).json({
-          error: err.code || 'AI_GATEWAY_ERROR',
-          message: err.safeMessage || err.message,
-          ...(err.details ? { details: err.details } : {}),
-        });
-        return;
-      }
-
-      console.error('[Quiz Routes] POST /api/quizzes/generate-from-material error:', err);
-      res.status(500).json({
-        error: 'GENERATION_ERROR',
-        message: err.message || 'Failed to generate quiz from study material.',
-      });
-    }
-  }
-);
 
 /**
  * GET /api/quizzes/:quizId

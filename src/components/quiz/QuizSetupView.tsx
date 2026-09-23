@@ -5,8 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { quizApi } from '../../services/quizApi';
-import { materialApi } from '../../services/materialApi';
-import type { Quiz, QuestionBankMeta, QuizMode, QuizQuestionType, StudyMaterial } from '../../types';
+import type { Quiz, QuestionBankMeta, QuizMode, QuizQuestionType } from '../../types';
 
 interface QuizSetupViewProps {
   onPaperCreated: (quiz: Quiz) => void;
@@ -18,15 +17,6 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
   const [loadingMeta, setLoadingMeta] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // Source selection: 'question_bank' vs 'uploaded_material'
-  const [source, setSource] = useState<'question_bank' | 'uploaded_material'>('question_bank');
-
-  // Uploaded materials state
-  const [materials, setMaterials] = useState<StudyMaterial[]>([]);
-  const [loadingMaterials, setLoadingMaterials] = useState<boolean>(false);
-  const [selectedMaterialId, setSelectedMaterialId] = useState<string>('');
-  const [topicFocus, setTopicFocus] = useState<string>('');
 
   // Configuration state
   const [title, setTitle] = useState<string>('');
@@ -48,7 +38,7 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
   const [availableQuestionsCount, setAvailableQuestionsCount] = useState<number | null>(null);
   const [isCheckingCount, setIsCheckingCount] = useState<boolean>(false);
 
-  // Load question bank metadata and uploaded materials on mount
+  // Load question bank metadata on mount
   useEffect(() => {
     async function loadData() {
       try {
@@ -67,21 +57,6 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
         console.error('Failed to load question bank meta:', err);
       } finally {
         setLoadingMeta(false);
-      }
-
-      // Also fetch user's ready materials
-      try {
-        setLoadingMaterials(true);
-        const matRes = await materialApi.getMaterials({ status: 'ready' });
-        const readyMats = matRes.materials || [];
-        setMaterials(readyMats);
-        if (readyMats.length > 0) {
-          setSelectedMaterialId(readyMats[0].id);
-        }
-      } catch (matErr: any) {
-        console.error('Failed to load student study materials:', matErr);
-      } finally {
-        setLoadingMaterials(false);
       }
     }
     loadData();
@@ -104,40 +79,8 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
     setTitle(`${subject} • ${newTop} Assessment`);
   };
 
-  const handleMaterialChange = (matId: string) => {
-    setSelectedMaterialId(matId);
-    const selected = materials.find((m) => m.id === matId);
-    if (selected) {
-      setTitle(`${selected.title} • AI Assessment`);
-      if (selected.topic) {
-        setTopicFocus(selected.topic);
-      }
-    }
-  };
-
-  const handleSourceChange = (newSource: 'question_bank' | 'uploaded_material') => {
-    setSource(newSource);
-    setErrorMessage(null);
-    if (newSource === 'uploaded_material') {
-      const selected = materials.find((m) => m.id === selectedMaterialId);
-      if (selected) {
-        setTitle(`${selected.title} • AI Assessment`);
-      } else if (materials.length > 0) {
-        setSelectedMaterialId(materials[0].id);
-        setTitle(`${materials[0].title} • AI Assessment`);
-      }
-    } else {
-      setTitle(`${subject} • ${topic} Assessment`);
-    }
-  };
-
   // Check available count whenever question bank criteria changes
   useEffect(() => {
-    if (source !== 'question_bank') {
-      setAvailableQuestionsCount(null);
-      return;
-    }
-
     let active = true;
     async function checkCount() {
       if (!subject) return;
@@ -167,7 +110,7 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
       active = false;
       clearTimeout(timer);
     };
-  }, [source, subject, topic, difficulty, selectedTypes]);
+  }, [subject, topic, difficulty, selectedTypes]);
 
   const toggleQuestionType = (t: QuizQuestionType) => {
     if (selectedTypes.includes(t)) {
@@ -182,65 +125,35 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
     e.preventDefault();
     setErrorMessage(null);
 
-    if (source === 'question_bank') {
-      if (availableQuestionsCount !== null && availableQuestionsCount < questionCount) {
-        setErrorMessage(
-          `Insufficient questions: You requested ${questionCount} questions, but only ${availableQuestionsCount} match your selected criteria. Please lower the question count or expand the topics/question types.`
-        );
-        return;
-      }
+    if (availableQuestionsCount !== null && availableQuestionsCount < questionCount) {
+      setErrorMessage(
+        `Insufficient questions: You requested ${questionCount} questions, but only ${availableQuestionsCount} match your selected criteria. Please lower the question count or expand the topics/question types.`
+      );
+      return;
+    }
 
-      try {
-        setIsSubmitting(true);
-        const res = await quizApi.createQuiz({
-          title: title.trim() || `${subject} Assessment`,
-          mode,
-          source: 'question_bank',
-          subject,
-          topic,
-          question_count: questionCount,
-          time_limit_minutes: timeLimitMinutes,
-          difficulty: difficulty.toLowerCase(),
-          question_types: selectedTypes,
-          negative_marking: negativeMarking,
-          negative_mark_value: negativeMarking ? negativeMarkValue : 0,
-          randomization,
-        });
+    try {
+      setIsSubmitting(true);
+      const res = await quizApi.createQuiz({
+        title: title.trim() || `${subject} Assessment`,
+        mode,
+        source: 'question_bank',
+        subject,
+        topic,
+        question_count: questionCount,
+        time_limit_minutes: timeLimitMinutes,
+        difficulty: difficulty.toLowerCase(),
+        question_types: selectedTypes,
+        negative_marking: negativeMarking,
+        negative_mark_value: negativeMarking ? negativeMarkValue : 0,
+        randomization,
+      });
 
-        onPaperCreated(res.quiz);
-      } catch (err: any) {
-        setErrorMessage(err.message || 'Failed to generate quiz paper.');
-      } finally {
-        setIsSubmitting(false);
-      }
-    } else {
-      // Generate from Uploaded Study Material (Phase 10A)
-      if (!selectedMaterialId) {
-        setErrorMessage('Please select an uploaded study material to generate questions from.');
-        return;
-      }
-
-      try {
-        setIsSubmitting(true);
-        const res = await quizApi.generateQuizFromMaterial({
-          material_id: selectedMaterialId,
-          title: title.trim() || undefined,
-          mode,
-          question_count: questionCount,
-          time_limit_minutes: timeLimitMinutes,
-          difficulty: difficulty === 'mixed' ? 'medium' : difficulty,
-          topic_focus: topicFocus.trim() || undefined,
-          negative_marking: negativeMarking,
-          negative_mark_value: negativeMarking ? negativeMarkValue : 0,
-          randomization,
-        });
-
-        onPaperCreated(res.quiz);
-      } catch (err: any) {
-        setErrorMessage(err.message || 'Failed to generate quiz from study material.');
-      } finally {
-        setIsSubmitting(false);
-      }
+      onPaperCreated(res.quiz);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to generate quiz paper.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -253,27 +166,24 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
     );
   }
 
-  const selectedMaterial = materials.find((m) => m.id === selectedMaterialId);
-
   return (
     <div className="max-w-3xl mx-auto pb-24">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-8">
         <div>
           <button
+            type="button"
             onClick={onCancel}
-            className="flex items-center gap-1.5 text-[13px] font-semibold text-[#0051d5] hover:underline mb-2"
+            className="flex items-center gap-1.5 text-[13px] font-semibold text-[#0051d5] hover:underline mb-2 cursor-pointer"
           >
             <span className="material-symbols-outlined text-[16px]">arrow_back</span>
-            Back to Quiz Home
+            Back to Quiz Overview
           </button>
           <h2 className="text-[24px] font-bold text-[#0b1c30] tracking-tight">
             Quiz Paper Builder
           </h2>
           <p className="text-[13px] text-[#44474d] mt-0.5">
-            {source === 'uploaded_material'
-              ? 'Synthesize grounded exam-grade questions from your uploaded lecture notes and PDFs with AI verification.'
-              : 'Configure an authoritative exam-grade or practice assessment backed by the PostgreSQL curriculum question bank.'}
+            Configure an authoritative exam-grade or practice assessment backed by the PostgreSQL curriculum question bank.
           </p>
         </div>
       </div>
@@ -365,14 +275,8 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
             Question Source
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => handleSourceChange('question_bank')}
-              className={`p-3.5 rounded-xl border text-left flex items-center justify-between transition-all ${
-                source === 'question_bank'
-                  ? 'border-[#0051d5]/40 bg-[#eff4ff] ring-1 ring-[#0051d5]'
-                  : 'border-[#c5c6ce]/30 bg-white hover:bg-[#f8f9ff]'
-              }`}
+            <div
+              className="p-3.5 rounded-xl border border-[#0051d5]/40 bg-[#eff4ff] ring-1 ring-[#0051d5] text-left flex items-center justify-between"
             >
               <div className="flex items-center gap-2.5">
                 <span className="material-symbols-outlined text-[18px] text-[#0051d5]">database</span>
@@ -381,149 +285,66 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
                   <div className="text-[11px] text-[#75777e]">Standardized university syllabus database</div>
                 </div>
               </div>
-              {source === 'question_bank' && (
-                <span className="text-[10px] bg-[#0051d5] text-white font-bold px-2 py-0.5 rounded-full">
-                  Selected
-                </span>
-              )}
-            </button>
+              <span className="text-[10px] bg-[#0051d5] text-white font-bold px-2 py-0.5 rounded-full">
+                Active
+              </span>
+            </div>
 
-            <button
-              type="button"
-              onClick={() => handleSourceChange('uploaded_material')}
-              className={`p-3.5 rounded-xl border text-left flex items-center justify-between transition-all ${
-                source === 'uploaded_material'
-                  ? 'border-[#0051d5]/40 bg-[#eff4ff] ring-1 ring-[#0051d5]'
-                  : 'border-[#c5c6ce]/30 bg-white hover:bg-[#f8f9ff]'
-              }`}
+            <div
+              className="p-3.5 rounded-xl border border-[#c5c6ce]/30 bg-slate-50/80 opacity-60 cursor-not-allowed text-left flex items-center justify-between"
+              title="AI quiz generation from uploaded materials will be enabled once a dedicated generation provider is provisioned."
             >
               <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-[18px] text-[#0051d5]">upload_file</span>
+                <span className="material-symbols-outlined text-[18px] text-slate-400">upload_file</span>
                 <div>
-                  <div className="text-[13px] font-bold text-[#0b1c30]">Uploaded Lecture PDF / Notes</div>
-                  <div className="text-[11px] text-[#75777e]">Grounded AI generation with source provenance</div>
+                  <div className="text-[13px] font-bold text-slate-500">Uploaded Lecture PDF / Notes</div>
+                  <div className="text-[11px] text-slate-400">Grounded AI generation with source provenance</div>
                 </div>
               </div>
-              {source === 'uploaded_material' && (
-                <span className="text-[10px] bg-[#0051d5] text-white font-bold px-2 py-0.5 rounded-full">
-                  Selected
-                </span>
-              )}
-            </button>
+              <span className="text-[10px] bg-slate-200 text-slate-600 font-semibold px-2 py-0.5 rounded-full border border-slate-300">
+                Coming in AI generation phase
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Dynamic Controls Based on Source */}
-        {source === 'question_bank' ? (
-          <>
-            {/* Subject and Topic for Question Bank */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[12px] font-bold uppercase tracking-wider text-[#44474d] mb-1.5">
-                  Subject
-                </label>
-                <select
-                  value={subject}
-                  onChange={(e) => handleSubjectChange(e.target.value)}
-                  className="w-full bg-[#f8f9ff] border border-[#c5c6ce]/40 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold text-[#0b1c30] outline-none"
-                >
-                  {meta?.subjects.map((s) => (
-                    <option key={s.name} value={s.name}>
-                      {s.name} ({s.total_questions} questions)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[12px] font-bold uppercase tracking-wider text-[#44474d] mb-1.5">
-                  Topic
-                </label>
-                <select
-                  value={topic}
-                  onChange={(e) => handleTopicChange(e.target.value)}
-                  className="w-full bg-[#f8f9ff] border border-[#c5c6ce]/40 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold text-[#0b1c30] outline-none"
-                >
-                  <option value="All Topics">All Topics</option>
-                  {currentTopics.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </>
-        ) : (
-          /* Uploaded Study Material Selector */
-          <div className="flex flex-col gap-4 p-4.5 bg-[#f8f9ff] border border-[#0051d5]/20 rounded-2xl">
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] font-bold text-[#0b1c30] flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[18px] text-[#0051d5]">menu_book</span>
-                Select Grounding Document
-              </span>
-              <span className="text-[11px] text-[#75777e]">
-                {materials.length} ready material{materials.length === 1 ? '' : 's'} available
-              </span>
-            </div>
-
-            {loadingMaterials ? (
-              <div className="py-4 text-center text-[12px] text-[#75777e] flex items-center justify-center gap-2">
-                <div className="w-4 h-4 border-2 border-[#0051d5] border-t-transparent rounded-full animate-spin"></div>
-                Loading uploaded materials...
-              </div>
-            ) : materials.length === 0 ? (
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-center">
-                <p className="text-[13px] font-semibold text-amber-900 mb-1">No Ready Study Materials Found</p>
-                <p className="text-[12px] text-amber-700">
-                  Upload a lecture PDF or notes in the Study Materials tab first. Once processed and ready, it will appear here.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#44474d] mb-1.5">
-                    Study Material Document
-                  </label>
-                  <select
-                    value={selectedMaterialId}
-                    onChange={(e) => handleMaterialChange(e.target.value)}
-                    className="w-full bg-white border border-[#c5c6ce]/50 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold text-[#0b1c30] outline-none"
-                  >
-                    {materials.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.title} ({m.subject})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#44474d] mb-1.5">
-                    Topic Focus (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={topicFocus}
-                    onChange={(e) => setTopicFocus(e.target.value)}
-                    placeholder={selectedMaterial?.topic || 'e.g. Specific section or concept'}
-                    className="w-full bg-white border border-[#c5c6ce]/50 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold text-[#0b1c30] placeholder-[#75777e] outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {selectedMaterial && (
-              <div className="text-[11px] text-[#44474d] bg-white p-3 rounded-xl border border-[#c5c6ce]/30 flex flex-wrap items-center gap-x-4 gap-y-1">
-                <span><strong>Subject:</strong> {selectedMaterial.subject}</span>
-                <span>•</span>
-                <span><strong>File:</strong> {selectedMaterial.originalFilename}</span>
-                <span>•</span>
-                <span><strong>Status:</strong> <span className="text-emerald-700 font-semibold uppercase">{selectedMaterial.processingStatus}</span></span>
-              </div>
-            )}
+        {/* Subject and Topic for Question Bank */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-[12px] font-bold uppercase tracking-wider text-[#44474d] mb-1.5">
+              Subject
+            </label>
+            <select
+              value={subject}
+              onChange={(e) => handleSubjectChange(e.target.value)}
+              className="w-full bg-[#f8f9ff] border border-[#c5c6ce]/40 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold text-[#0b1c30] outline-none"
+            >
+              {meta?.subjects.map((s) => (
+                <option key={s.name} value={s.name}>
+                  {s.name} ({s.total_questions} questions)
+                </option>
+              ))}
+            </select>
           </div>
-        )}
+
+          <div>
+            <label className="block text-[12px] font-bold uppercase tracking-wider text-[#44474d] mb-1.5">
+              Topic
+            </label>
+            <select
+              value={topic}
+              onChange={(e) => handleTopicChange(e.target.value)}
+              className="w-full bg-[#f8f9ff] border border-[#c5c6ce]/40 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold text-[#0b1c30] outline-none"
+            >
+              <option value="All Topics">All Topics</option>
+              {currentTopics.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
 
         {/* Question Count & Time Limit */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -532,19 +353,17 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
               <label className="block text-[12px] font-bold uppercase tracking-wider text-[#44474d]">
                 Question Count
               </label>
-              {source === 'question_bank' && (
-                isCheckingCount ? (
-                  <span className="text-[11px] text-[#75777e] animate-pulse">Checking DB...</span>
-                ) : availableQuestionsCount !== null ? (
-                  <span
-                    className={`text-[11px] font-semibold ${
-                      availableQuestionsCount >= questionCount ? 'text-emerald-600' : 'text-rose-600 font-bold'
-                    }`}
-                  >
-                    {availableQuestionsCount} available in DB
-                  </span>
-                ) : null
-              )}
+              {isCheckingCount ? (
+                <span className="text-[11px] text-[#75777e] animate-pulse">Checking DB...</span>
+              ) : availableQuestionsCount !== null ? (
+                <span
+                  className={`text-[11px] font-semibold ${
+                    availableQuestionsCount >= questionCount ? 'text-emerald-600' : 'text-rose-600 font-bold'
+                  }`}
+                >
+                  {availableQuestionsCount} available in DB
+                </span>
+              ) : null}
             </div>
             <select
               value={questionCount}
@@ -605,51 +424,42 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
           </div>
         </div>
 
-        {/* Question Types Checkboxes (Question Bank only) */}
-        {source === 'question_bank' ? (
-          <div>
-            <label className="block text-[12px] font-bold uppercase tracking-wider text-[#44474d] mb-2">
-              Allowed Question Formats
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-              {[
-                { type: 'MCQ', label: 'Single Choice (MCQ)' },
-                { type: 'MULTIPLE_SELECT', label: 'Multiple Select' },
-                { type: 'TRUE_FALSE', label: 'True / False' },
-                { type: 'FILL_BLANK', label: 'Fill in the Blank' },
-                { type: 'VERY_SHORT', label: 'Very Short (Subjective)' },
-                { type: 'SHORT', label: 'Short Answer' },
-                { type: 'LONG', label: 'Long / Derivation' },
-              ].map((item) => {
-                const isSelected = selectedTypes.includes(item.type as QuizQuestionType);
-                return (
-                  <button
-                    key={item.type}
-                    type="button"
-                    onClick={() => toggleQuestionType(item.type as QuizQuestionType)}
-                    className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all ${
-                      isSelected
-                        ? 'bg-[#eff4ff] border-[#0051d5]/40 text-[#0051d5]'
-                        : 'bg-white border-[#c5c6ce]/30 text-[#75777e] hover:bg-[#f8f9ff]'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[16px]">
-                      {isSelected ? 'check_box' : 'check_box_outline_blank'}
-                    </span>
-                    <span className="text-[12px] font-semibold">{item.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+        {/* Question Types Checkboxes */}
+        <div>
+          <label className="block text-[12px] font-bold uppercase tracking-wider text-[#44474d] mb-2">
+            Allowed Question Formats
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            {[
+              { type: 'MCQ', label: 'Single Choice (MCQ)' },
+              { type: 'MULTIPLE_SELECT', label: 'Multiple Select' },
+              { type: 'TRUE_FALSE', label: 'True / False' },
+              { type: 'FILL_BLANK', label: 'Fill in the Blank' },
+              { type: 'VERY_SHORT', label: 'Very Short (Subjective)' },
+              { type: 'SHORT', label: 'Short Answer' },
+              { type: 'LONG', label: 'Long / Derivation' },
+            ].map((item) => {
+              const isSelected = selectedTypes.includes(item.type as QuizQuestionType);
+              return (
+                <button
+                  key={item.type}
+                  type="button"
+                  onClick={() => toggleQuestionType(item.type as QuizQuestionType)}
+                  className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all ${
+                    isSelected
+                      ? 'bg-[#eff4ff] border-[#0051d5]/40 text-[#0051d5]'
+                      : 'bg-white border-[#c5c6ce]/30 text-[#75777e] hover:bg-[#f8f9ff]'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    {isSelected ? 'check_box' : 'check_box_outline_blank'}
+                  </span>
+                  <span className="text-[12px] font-semibold">{item.label}</span>
+                </button>
+              );
+            })}
           </div>
-        ) : (
-          <div className="p-3.5 bg-blue-50/60 border border-blue-100 rounded-xl text-[12px] text-blue-900 flex items-center gap-2.5">
-            <span className="material-symbols-outlined text-[18px] text-[#0051d5]">check_circle</span>
-            <span>
-              Uploaded material quizzes generate structured 4-option MCQs validated with clear explanations and source chunk citations.
-            </span>
-          </div>
-        )}
+        </div>
 
         {/* Negative Marking & Randomization */}
         <div className="border-t border-[#c5c6ce]/20 pt-5 flex flex-col gap-4">
@@ -725,19 +535,18 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
             type="submit"
             disabled={
               isSubmitting ||
-              (source === 'question_bank' && availableQuestionsCount !== null && availableQuestionsCount < questionCount) ||
-              (source === 'uploaded_material' && materials.length === 0)
+              (availableQuestionsCount !== null && availableQuestionsCount < questionCount)
             }
             className="px-6 py-2.5 rounded-xl bg-[#0051d5] text-white text-[13px] font-bold shadow-md hover:bg-[#003ea8] transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                <span>{source === 'uploaded_material' ? 'Generating with AI...' : 'Building Paper...'}</span>
+                <span>Building Paper...</span>
               </>
             ) : (
               <>
-                <span>{source === 'uploaded_material' ? 'Generate AI Quiz' : 'Preview Paper'}</span>
+                <span>Preview Paper</span>
                 <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
               </>
             )}
