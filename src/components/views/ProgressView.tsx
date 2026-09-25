@@ -6,8 +6,13 @@
 import React, { useEffect, useState } from 'react';
 import { analyticsApi, type ProgressResponse } from '../../services/analyticsApi';
 import { useStudySession } from '../../hooks/useStudySession';
+import { ActiveNavTab } from '../../types';
 
-export const ProgressView: React.FC = () => {
+interface ProgressViewProps {
+  onNavigate?: (tab: ActiveNavTab) => void;
+}
+
+export const ProgressView: React.FC<ProgressViewProps> = ({ onNavigate }) => {
   // Track study time during progress inspection
   useStudySession();
 
@@ -81,6 +86,31 @@ export const ProgressView: React.FC = () => {
           {error}
         </div>
       )}
+
+      {/* Adaptive Student Model Transition Banner */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-[#eff4ff] to-[#f4f7ff] border border-[#d3e4fe] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-start gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-[#0051d5] text-white flex items-center justify-center shrink-0 shadow-xs">
+            <span className="material-symbols-outlined text-[22px]">psychology</span>
+          </div>
+          <div>
+            <h3 className="text-[15px] font-bold text-[#0b1c30]">
+              Explore Your Adaptive Student Model
+            </h3>
+            <p className="text-[12px] text-[#44474d] mt-0.5 leading-relaxed max-w-xl">
+              Inspect your Bayesian-shrunk mastery scores, topic-level statistical confidence, forgetting curve decay, and rule-based difficulty readiness.
+            </p>
+          </div>
+        </div>
+        {onNavigate && (
+          <button
+            onClick={() => onNavigate('adaptive-model')}
+            className="px-4 py-2 bg-[#0051d5] hover:bg-[#0041b0] text-white rounded-xl text-[13px] font-semibold transition-colors cursor-pointer shrink-0 shadow-xs"
+          >
+            Open Adaptive Model
+          </button>
+        )}
+      </div>
 
       {/* Top 3 Diagnostic Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

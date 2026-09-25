@@ -6,6 +6,7 @@
 import { getRequiredPool } from '../db/connection.js';
 import { quizSessionRepository, type QuizResultRecord } from '../repositories/quiz_session.repository.js';
 import { quizRepository, type QuizQuestionRecord } from '../repositories/quiz.repository.js';
+import { adaptiveModelService } from './adaptive-model.service.js';
 
 export interface QuestionReviewItem {
   id: string;
@@ -390,6 +391,11 @@ export class ScoringService {
       );
 
       await client.query('COMMIT');
+
+      // Trigger deterministic adaptive student model update
+      adaptiveModelService.recordQuizSubmission(studentId, sessionId).catch((err) => {
+        console.warn('[AdaptiveModel] Real-time sync warning:', err?.message || err);
+      });
 
       // Fetch quiz header info
       const quizRes = await pool.query(

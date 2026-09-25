@@ -26,6 +26,7 @@ import { StudyKitsView } from './components/views/StudyKitsView';
 import { FlashcardsView } from './components/views/FlashcardsView';
 import { QuizzesView } from './components/views/QuizzesView';
 import { ProgressView } from './components/views/ProgressView';
+import { AdaptiveModelView } from './components/views/AdaptiveModelView';
 import { WeakTopicsView } from './components/views/WeakTopicsView';
 import { PeerComparisonView } from './components/views/PeerComparisonView';
 import { SettingsView } from './components/views/SettingsView';
@@ -211,7 +212,19 @@ function AuthenticatedApp() {
             />
           )}
 
-          {activeTab === 'my-progress' && <ProgressView />}
+          {activeTab === 'my-progress' && <ProgressView onNavigate={(tab) => {
+            setActiveTab(tab);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }} />}
+
+          {activeTab === 'adaptive-model' && (
+            <AdaptiveModelView
+              onNavigate={(tab) => {
+                setActiveTab(tab);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          )}
 
           {activeTab === 'weak-topics' && (
             <WeakTopicsView

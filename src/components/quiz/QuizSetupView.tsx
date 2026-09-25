@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { quizApi } from '../../services/quizApi';
+import { adaptiveApi, type TopicMasteryData } from '../../services/adaptiveApi';
 import type { Quiz, QuestionBankMeta, QuizMode, QuizQuestionType } from '../../types';
 
 interface QuizSetupViewProps {
@@ -37,14 +38,19 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
   const [randomization, setRandomization] = useState<boolean>(true);
   const [availableQuestionsCount, setAvailableQuestionsCount] = useState<number | null>(null);
   const [isCheckingCount, setIsCheckingCount] = useState<boolean>(false);
+  const [adaptiveTopics, setAdaptiveTopics] = useState<TopicMasteryData[]>([]);
 
-  // Load question bank metadata on mount
+  // Load question bank metadata and adaptive model on mount
   useEffect(() => {
     async function loadData() {
       try {
         setLoadingMeta(true);
-        const data = await quizApi.getQuestionBankMeta();
+        const [data, adaptiveData] = await Promise.all([
+          quizApi.getQuestionBankMeta(),
+          adaptiveApi.getTopics().catch(() => ({ topics: [] })),
+        ]);
         setMeta(data);
+        setAdaptiveTopics(adaptiveData?.topics || []);
         if (data.subjects.length > 0) {
           const firstSub = data.subjects[0];
           setSubject(firstSub.name);
@@ -65,6 +71,10 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
   // Update topics when subject changes
   const currentSubjectData = meta?.subjects.find((s) => s.name === subject);
   const currentTopics = currentSubjectData ? currentSubjectData.topics : [];
+
+  const selectedTopicAdaptive = adaptiveTopics.find(
+    (t) => t.subject.toLowerCase() === subject.toLowerCase() && t.topic.toLowerCase() === topic.toLowerCase()
+  );
 
   const handleSubjectChange = (newSub: string) => {
     setSubject(newSub);
@@ -418,9 +428,17 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
 
         {/* Difficulty */}
         <div>
-          <label className="block text-[12px] font-bold uppercase tracking-wider text-[#44474d] mb-2">
-            Target Difficulty
-          </label>
+          <div className="flex flex-wrap items-center justify-between gap-1 mb-2">
+            <label className="block text-[12px] font-bold uppercase tracking-wider text-[#44474d]">
+              Target Difficulty
+            </label>
+            {selectedTopicAdaptive && (
+              <span className="text-[11px] text-[#0051d5] font-semibold flex items-center gap-1">
+                <span className="material-symbols-outlined text-[15px]">psychology</span>
+                Adaptive Readiness: <strong className="capitalize underline">{selectedTopicAdaptive.recommended_difficulty}</strong> ({selectedTopicAdaptive.mastery_score}% Mastery)
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
               { id: 'easy', label: 'Easy' },

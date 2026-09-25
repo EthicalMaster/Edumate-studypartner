@@ -15,6 +15,7 @@ import { materialRouter } from './server/routes/material.routes.js';
 import { retrievalRouter } from './server/routes/retrieval.routes.js';
 import { aiRouter } from './server/routes/ai.routes.js';
 import { analyticsRouter } from './server/routes/analytics.routes.js';
+import { adaptiveRouter } from './server/routes/adaptive.routes.js';
 import { checkConnection } from './server/db/connection.js';
 import { pythonEmbeddingRunner } from './server/services/embedding/python-embedding-runner.js';
 
@@ -86,6 +87,10 @@ async function startServer() {
 
   // Mount Learning Analytics Router (Phase 8.5)
   app.use('/api/analytics', analyticsRouter);
+
+  // Mount Adaptive Student Model Router (Phase 11)
+  app.use('/api/adaptive', adaptiveRouter);
+  app.use('/api/student-model', adaptiveRouter);
 
   // Mount Quiz Router (handles /api/quizzes, /api/quiz-sessions, /api/quiz-results, /api/quiz-history)
   app.use('/api/quizzes', quizRouter);

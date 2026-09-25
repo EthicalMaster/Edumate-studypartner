@@ -24,6 +24,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'flashcards', label: 'Flashcards', icon: 'style', badge: '86' },
     { id: 'quizzes', label: 'Quizzes', icon: 'quiz' },
     { id: 'my-progress', label: 'My Progress', icon: 'insights' },
+    { id: 'adaptive-model', label: 'Adaptive Model', icon: 'psychology' },
     { id: 'weak-topics', label: 'Weak Topics', icon: 'target', badge: '4' },
     { id: 'peer-comparison', label: 'Peer Comparison', icon: 'leaderboard' },
   ];

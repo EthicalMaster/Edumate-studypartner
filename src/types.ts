@@ -4,6 +4,7 @@ export type ActiveNavTab =
   | 'flashcards' 
   | 'quizzes' 
   | 'my-progress' 
+  | 'adaptive-model'
   | 'weak-topics' 
   | 'peer-comparison' 
   | 'settings';
