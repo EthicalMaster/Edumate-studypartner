@@ -18,10 +18,13 @@ import {
   registerSchema,
   loginSchema,
   updateProfileSchema,
+  completeOnboardingSchema,
   type RegisterInput,
   type LoginInput,
   type UpdateProfileInput,
+  type CompleteOnboardingInput,
 } from '../utils/validation.js';
+import { curriculumService, ACADEMIC_PROGRAMS } from '../services/curriculum.service.js';
 
 export const authRouter = Router();
 
@@ -226,3 +229,59 @@ authRouter.patch(
     }
   }
 );
+
+/**
+ * POST /api/auth/onboarding/complete
+ * Marks onboarding as complete for the authenticated student,
+ * updates their configured academic profile preferences, and returns updated user.
+ */
+authRouter.post(
+  '/onboarding/complete',
+  requireAuth,
+  validateBody(completeOnboardingSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const input = req.body as CompleteOnboardingInput;
+      const updatedUser = await authService.completeOnboarding(req.user!.id, input);
+
+      res.json({
+        success: true,
+        message: 'Onboarding completed and curriculum profile initialized.',
+        user: updatedUser,
+      });
+    } catch (err: any) {
+      console.error('[Onboarding Complete Error]:', err);
+      res.status(500).json({
+        error: 'ONBOARDING_FAILED',
+        message: 'Unable to record onboarding completion.',
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/auth/curriculum
+ * Returns the authenticated student's personalized curriculum eligibility,
+ * active academic stage, program, and available programs catalog.
+ */
+authRouter.get(
+  '/curriculum',
+  requireAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const resolved = curriculumService.resolveCurriculum(req.user!.profile);
+
+      res.json({
+        curriculum: resolved,
+        catalog: ACADEMIC_PROGRAMS,
+      });
+    } catch (err: any) {
+      console.error('[Curriculum Fetch Error]:', err);
+      res.status(500).json({
+        error: 'CURRICULUM_FETCH_FAILED',
+        message: 'Failed to resolve academic curriculum.',
+      });
+    }
+  }
+);
+

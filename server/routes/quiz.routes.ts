@@ -16,6 +16,7 @@ import { quizRepository } from '../repositories/quiz.repository.js';
 import { quizSessionRepository } from '../repositories/quiz_session.repository.js';
 import { scoringService } from '../services/scoring.service.js';
 import { analyticsRepository } from '../repositories/analytics.repository.js';
+import { curriculumService, CurriculumIneligibleError } from '../services/curriculum.service.js';
 
 export const quizRouter = Router();
 
@@ -53,12 +54,15 @@ quizRouter.get('/', async (req: Request, res: Response) => {
 
 /**
  * GET /api/quizzes/bank/meta
- * Retrieve subjects, topics, and question availability in the question bank.
+ * Retrieve subjects, topics, and question availability in the question bank,
+ * strictly filtered to the authenticated student's academic curriculum eligibility.
  */
-quizRouter.get('/bank/meta', async (_req: Request, res: Response) => {
+quizRouter.get('/bank/meta', async (req: Request, res: Response) => {
   try {
-    const meta = await quizRepository.getQuestionBankMetadata();
-    res.json(meta);
+    const rawMeta = await quizRepository.getQuestionBankMetadata();
+    const profile = req.user?.profile || {};
+    const filteredMeta = curriculumService.filterQuestionBankMeta(rawMeta, profile);
+    res.json(filteredMeta);
   } catch (err: any) {
     console.error('[Quiz Routes] GET /api/quizzes/bank/meta error:', err);
     res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Failed to fetch question bank metadata.' });
@@ -68,8 +72,9 @@ quizRouter.get('/bank/meta', async (_req: Request, res: Response) => {
 /**
  * GET /api/quizzes/bank/count
  * Count matching questions in the question bank before generation.
+ * Enforces curriculum eligibility: returns 403 if subject/topic is outside academic context.
  */
-quizRouter.get('/bank/count', async (req: Request, res: Response) => {
+quizRouter.get('/bank/count', async (req: Request, res: Response): Promise<void> => {
   try {
     const subject = String(req.query.subject || '');
     const topic = req.query.topic ? String(req.query.topic) : undefined;
@@ -81,6 +86,21 @@ quizRouter.get('/bank/count', async (req: Request, res: Response) => {
     if (!subject) {
       res.status(400).json({ error: 'BAD_REQUEST', message: 'Subject query parameter is required.' });
       return;
+    }
+
+    // Server-Authoritative Academic Curriculum Check
+    const profile = req.user?.profile || {};
+    try {
+      curriculumService.assertCurriculumEligibility(profile, subject, topic);
+    } catch (ineligibleErr: any) {
+      if (ineligibleErr instanceof CurriculumIneligibleError) {
+        res.status(403).json({
+          error: 'CURRICULUM_INELIGIBLE',
+          message: ineligibleErr.message,
+        });
+        return;
+      }
+      throw ineligibleErr;
     }
 
     const count = await quizRepository.countAvailableQuestions({
@@ -100,10 +120,28 @@ quizRouter.get('/bank/count', async (req: Request, res: Response) => {
 /**
  * POST /api/quizzes
  * Create / build a quiz paper.
+ * Server-Authoritative Gate: Enforces curriculum eligibility.
+ * An authenticated user CANNOT bypass frontend and generate a quiz for an unauthorized subject/topic.
  */
-quizRouter.post('/', validateBody(createQuizSchema), async (req: Request, res: Response) => {
+quizRouter.post('/', validateBody(createQuizSchema), async (req: Request, res: Response): Promise<void> => {
   try {
     const studentId = getStudentProfileId(req);
+    const profile = req.user?.profile || {};
+
+    // Strict Curriculum Authorization Check
+    try {
+      curriculumService.assertCurriculumEligibility(profile, req.body.subject, req.body.topic);
+    } catch (ineligibleErr: any) {
+      if (ineligibleErr instanceof CurriculumIneligibleError) {
+        res.status(403).json({
+          error: 'CURRICULUM_INELIGIBLE',
+          message: ineligibleErr.message,
+        });
+        return;
+      }
+      throw ineligibleErr;
+    }
+
     const created = await quizRepository.createQuiz(studentId, req.body);
     res.status(201).json(created);
   } catch (err: any) {

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ActiveNavTab, StudyKit, StudyMaterial, Flashcard, QuizQuestion, WeakTopic, NotificationItem } from './types';
 import {
   INITIAL_STUDY_KITS,
@@ -19,6 +19,7 @@ import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { UploadModal } from './components/UploadModal';
 import { SummaryModal } from './components/SummaryModal';
+import { OnboardingModal } from './components/onboarding/OnboardingModal';
 
 import { HomeView } from './components/views/HomeView';
 import { StudyKitsView } from './components/views/StudyKitsView';
@@ -30,6 +31,7 @@ import { PeerComparisonView } from './components/views/PeerComparisonView';
 import { SettingsView } from './components/views/SettingsView';
 
 function AuthenticatedApp() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<ActiveNavTab>('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -44,7 +46,15 @@ function AuthenticatedApp() {
   // Modals
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [materialsRefreshTrigger, setMaterialsRefreshTrigger] = useState(0);
+
+  // Automatically prompt first-time onboarding if not yet completed
+  useEffect(() => {
+    if (user && user.profile && user.profile.has_completed_onboarding === false) {
+      setIsOnboardingOpen(true);
+    }
+  }, [user]);
 
   // Handling new study material upload (Phase 5)
   const handleMaterialUploaded = (mat: StudyMaterial) => {
@@ -140,6 +150,7 @@ function AuthenticatedApp() {
           notifications={notifications}
           onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
           onOpenUpload={() => setIsUploadOpen(true)}
+          onOpenOnboarding={() => setIsOnboardingOpen(true)}
         />
 
         {/* Primary Page Viewport */}
@@ -222,9 +233,18 @@ function AuthenticatedApp() {
             />
           )}
 
-          {activeTab === 'settings' && <SettingsView />}
+          {activeTab === 'settings' && (
+            <SettingsView onOpenOnboarding={() => setIsOnboardingOpen(true)} />
+          )}
         </main>
       </div>
+
+      {/* First-Time Academic Onboarding & Guide Modal */}
+      <OnboardingModal
+        isOpen={isOnboardingOpen}
+        onClose={() => setIsOnboardingOpen(false)}
+        onComplete={() => setIsOnboardingOpen(false)}
+      />
 
       {/* Upload Study Material Modal */}
       <UploadModal

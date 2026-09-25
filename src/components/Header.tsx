@@ -10,6 +10,7 @@ interface HeaderProps {
   notifications: NotificationItem[];
   onMarkAllNotificationsRead: () => void;
   onOpenUpload: () => void;
+  onOpenOnboarding?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -19,6 +20,7 @@ export const Header: React.FC<HeaderProps> = ({
   notifications,
   onMarkAllNotificationsRead,
   onOpenUpload,
+  onOpenOnboarding,
 }) => {
   const { user, logout } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
@@ -105,6 +107,18 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="material-symbols-outlined text-[18px]">upload_file</span>
           <span>Upload</span>
         </button>
+
+        {/* Academic Curriculum Guide Button */}
+        {onOpenOnboarding && (
+          <button
+            onClick={onOpenOnboarding}
+            title="Open EDUMATE Academic Curriculum & Onboarding Guide"
+            className="hidden md:inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[12px] font-semibold px-2.5 py-1.5 rounded-xl transition-all border border-slate-300"
+          >
+            <span className="material-symbols-outlined text-[17px] text-blue-600">help_center</span>
+            <span>Guide</span>
+          </button>
+        )}
 
         {/* 7 Day Streak Pill */}
         <div className="flex items-center gap-1.5 bg-[#e5eeff] px-3 py-1.5 rounded-full text-[#0051d5] text-[12px] font-semibold border border-[#0051d5]/15 shadow-xs">
@@ -221,6 +235,19 @@ export const Header: React.FC<HeaderProps> = ({
                   <div className="px-2 py-1 rounded-lg bg-[#eff4ff]/60 text-[11px] text-[#0b1c30]">
                     Univ: <span className="font-semibold">{user.profile.institution}</span>
                   </div>
+                )}
+
+                {onOpenOnboarding && (
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onOpenOnboarding();
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-blue-600 hover:bg-blue-50 text-[12px] font-semibold transition-colors cursor-pointer text-left"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">school</span>
+                    <span>Curriculum & Onboarding Tour</span>
+                  </button>
                 )}
 
                 <div className="border-t border-[#c5c6ce]/30 my-1"></div>

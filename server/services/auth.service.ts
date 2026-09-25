@@ -17,6 +17,7 @@ import {
   type RegisterInput,
   type LoginInput,
   type UpdateProfileInput,
+  type CompleteOnboardingInput,
 } from '../utils/validation.js';
 
 export const SESSION_EXPIRY_DAYS = 7;
@@ -157,10 +158,15 @@ export class AuthService {
         full_name: profile.full_name,
         education_level: profile.education_level,
         academic_stage: profile.academic_stage,
+        program: profile.program || null,
+        stream: profile.stream || null,
+        target_exam: profile.target_exam || null,
         institution: profile.institution,
         department: profile.department,
         current_year: profile.current_year,
         student_identifier: profile.student_identifier,
+        has_completed_onboarding: Boolean(profile.has_completed_onboarding),
+        onboarding_completed_at: profile.onboarding_completed_at || null,
       },
     };
 
@@ -207,6 +213,13 @@ export class AuthService {
    */
   async updateProfile(userId: string, data: UpdateProfileInput): Promise<SafeStudentUser | null> {
     return userRepository.updateProfile(userId, data);
+  }
+
+  /**
+   * Completes first-time onboarding for student and updates academic preferences.
+   */
+  async completeOnboarding(userId: string, data?: CompleteOnboardingInput): Promise<SafeStudentUser | null> {
+    return userRepository.completeOnboarding(userId, data);
   }
 }
 

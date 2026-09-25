@@ -122,6 +122,18 @@ export const registerSchema = z
       .trim()
       .max(60)
       .optional(),
+    program: z
+      .string()
+      .trim()
+      .max(100)
+      .optional()
+      .nullable(),
+    stream: z
+      .string()
+      .trim()
+      .max(100)
+      .optional()
+      .nullable(),
     institution: z
       .string()
       .trim()
@@ -220,6 +232,24 @@ export const updateProfileSchema = z.object({
     .max(60)
     .optional()
     .nullable(),
+  program: z
+    .string()
+    .trim()
+    .max(100)
+    .optional()
+    .nullable(),
+  stream: z
+    .string()
+    .trim()
+    .max(100)
+    .optional()
+    .nullable(),
+  target_exam: z
+    .string()
+    .trim()
+    .max(100)
+    .optional()
+    .nullable(),
   institution: z
     .string()
     .trim()
@@ -242,9 +272,20 @@ export const updateProfileSchema = z.object({
     .nullable(),
 });
 
+export const completeOnboardingSchema = z.object({
+  education_level: z.string().trim().max(60).optional(),
+  academic_stage: z.string().trim().max(60).optional(),
+  program: z.string().trim().max(100).optional().nullable(),
+  stream: z.string().trim().max(100).optional().nullable(),
+  target_exam: z.string().trim().max(100).optional().nullable(),
+  institution: z.string().trim().max(200).optional().nullable(),
+  department: z.string().trim().max(150).optional().nullable(),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+export type CompleteOnboardingInput = z.infer<typeof completeOnboardingSchema>;
 
 // ============================================================================
 // Phase 4: Quiz Engine & Paper Builder Schemas

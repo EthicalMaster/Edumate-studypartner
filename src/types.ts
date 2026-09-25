@@ -214,10 +214,15 @@ export interface StudentProfile {
   full_name: string;
   education_level?: string | null;
   academic_stage?: string | null;
+  program?: string | null;
+  stream?: string | null;
+  target_exam?: string | null;
   institution: string | null;
   department: string | null;
   current_year: number | null;
   student_identifier: string | null;
+  has_completed_onboarding?: boolean;
+  onboarding_completed_at?: string | null;
 }
 
 export interface StudentUser {
@@ -387,6 +392,14 @@ export interface QuestionBankMeta {
   }[];
   difficulties: string[];
   question_types: string[];
+  curriculum_context?: {
+    education_level: string;
+    academic_stage: string;
+    program: string;
+    stream: string;
+    description: string;
+    total_eligible_subjects: number;
+  };
 }
 
 export interface LeaderboardEntry {

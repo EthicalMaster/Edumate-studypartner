@@ -5,7 +5,7 @@
 
 import { getPool } from '../db/connection.js';
 import { generateLearnerId, hashPassword } from '../utils/crypto.js';
-import type { RegisterInput, UpdateProfileInput } from '../utils/validation.js';
+import type { RegisterInput, UpdateProfileInput, CompleteOnboardingInput } from '../utils/validation.js';
 
 export interface UserRecord {
   id: string;
@@ -25,10 +25,15 @@ export interface StudentProfileRecord {
   full_name: string;
   education_level: string | null;
   academic_stage: string | null;
+  program: string | null;
+  stream: string | null;
+  target_exam: string | null;
   institution: string | null;
   department: string | null;
   current_year: number | null;
   student_identifier: string | null;
+  has_completed_onboarding: boolean;
+  onboarding_completed_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -45,14 +50,41 @@ export interface SafeStudentUser {
     full_name: string;
     education_level: string | null;
     academic_stage: string | null;
+    program?: string | null;
+    stream?: string | null;
+    target_exam?: string | null;
     institution: string | null;
     department: string | null;
     current_year: number | null;
     student_identifier: string | null;
+    has_completed_onboarding?: boolean;
+    onboarding_completed_at?: Date | null;
   };
 }
 
 export class UserRepository {
+  private hasExtendedProfileCols: boolean | null = null;
+
+  public resetColumnCacheForTesting(): void {
+    this.hasExtendedProfileCols = null;
+  }
+
+  private async checkExtendedCols(runner: any): Promise<boolean> {
+    if (this.hasExtendedProfileCols !== null) {
+      return this.hasExtendedProfileCols;
+    }
+    try {
+      const res = await runner.query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name = 'student_profiles' AND column_name = 'program' LIMIT 1;
+      `);
+      this.hasExtendedProfileCols = Boolean(res.rows && res.rows.length > 0);
+    } catch {
+      this.hasExtendedProfileCols = false;
+    }
+    return Boolean(this.hasExtendedProfileCols);
+  }
+
   /**
    * Finds a user record along with student profile by normalized email address.
    */
@@ -62,32 +94,66 @@ export class UserRepository {
       throw new Error('DATABASE_NOT_CONFIGURED');
     }
 
-    const queryText = `
-      SELECT 
-        u.id as user_id,
-        u.email,
-        u.password_hash,
-        u.role,
-        u.is_active,
-        u.email_verified,
-        u.auth_provider,
-        u.created_at as user_created_at,
-        u.updated_at as user_updated_at,
-        p.id as profile_id,
-        p.full_name,
-        p.education_level,
-        p.academic_stage,
-        p.institution,
-        p.department,
-        p.current_year,
-        p.student_identifier,
-        p.created_at as profile_created_at,
-        p.updated_at as profile_updated_at
-      FROM users u
-      LEFT JOIN student_profiles p ON p.user_id = u.id
-      WHERE LOWER(u.email) = LOWER($1)
-      LIMIT 1;
-    `;
+    const hasExt = await this.checkExtendedCols(pool);
+
+    const queryText = hasExt
+      ? `
+        SELECT 
+          u.id as user_id,
+          u.email,
+          u.password_hash,
+          u.role,
+          u.is_active,
+          u.email_verified,
+          u.auth_provider,
+          u.created_at as user_created_at,
+          u.updated_at as user_updated_at,
+          p.id as profile_id,
+          p.full_name,
+          p.education_level,
+          p.academic_stage,
+          p.program,
+          p.stream,
+          p.target_exam,
+          p.institution,
+          p.department,
+          p.current_year,
+          p.student_identifier,
+          COALESCE(p.has_completed_onboarding, false) as has_completed_onboarding,
+          p.onboarding_completed_at,
+          p.created_at as profile_created_at,
+          p.updated_at as profile_updated_at
+        FROM users u
+        LEFT JOIN student_profiles p ON p.user_id = u.id
+        WHERE LOWER(u.email) = LOWER($1)
+        LIMIT 1;
+      `
+      : `
+        SELECT 
+          u.id as user_id,
+          u.email,
+          u.password_hash,
+          u.role,
+          u.is_active,
+          u.email_verified,
+          u.auth_provider,
+          u.created_at as user_created_at,
+          u.updated_at as user_updated_at,
+          p.id as profile_id,
+          p.full_name,
+          p.education_level,
+          p.academic_stage,
+          p.institution,
+          p.department,
+          p.current_year,
+          p.student_identifier,
+          p.created_at as profile_created_at,
+          p.updated_at as profile_updated_at
+        FROM users u
+        LEFT JOIN student_profiles p ON p.user_id = u.id
+        WHERE LOWER(u.email) = LOWER($1)
+        LIMIT 1;
+      `;
 
     const res = await pool.query(queryText, [email.trim().toLowerCase()]);
     if (res.rows.length === 0) {
@@ -113,10 +179,15 @@ export class UserRepository {
       full_name: row.full_name,
       education_level: row.education_level || null,
       academic_stage: row.academic_stage || null,
+      program: row.program || null,
+      stream: row.stream || null,
+      target_exam: row.target_exam || null,
       institution: row.institution,
       department: row.department,
       current_year: row.current_year,
       student_identifier: row.student_identifier,
+      has_completed_onboarding: Boolean(row.has_completed_onboarding),
+      onboarding_completed_at: row.onboarding_completed_at ? new Date(row.onboarding_completed_at) : null,
       created_at: row.profile_created_at,
       updated_at: row.profile_updated_at,
     };
@@ -133,27 +204,56 @@ export class UserRepository {
       throw new Error('DATABASE_NOT_CONFIGURED');
     }
 
-    const queryText = `
-      SELECT 
-        u.id as user_id,
-        u.email,
-        u.role,
-        u.is_active,
-        u.email_verified,
-        u.auth_provider,
-        p.id as profile_id,
-        p.full_name,
-        p.education_level,
-        p.academic_stage,
-        p.institution,
-        p.department,
-        p.current_year,
-        p.student_identifier
-      FROM users u
-      LEFT JOIN student_profiles p ON p.user_id = u.id
-      WHERE u.id = $1
-      LIMIT 1;
-    `;
+    const hasExt = await this.checkExtendedCols(pool);
+
+    const queryText = hasExt
+      ? `
+        SELECT 
+          u.id as user_id,
+          u.email,
+          u.role,
+          u.is_active,
+          u.email_verified,
+          u.auth_provider,
+          p.id as profile_id,
+          p.full_name,
+          p.education_level,
+          p.academic_stage,
+          p.program,
+          p.stream,
+          p.target_exam,
+          p.institution,
+          p.department,
+          p.current_year,
+          p.student_identifier,
+          COALESCE(p.has_completed_onboarding, false) as has_completed_onboarding,
+          p.onboarding_completed_at
+        FROM users u
+        LEFT JOIN student_profiles p ON p.user_id = u.id
+        WHERE u.id = $1
+        LIMIT 1;
+      `
+      : `
+        SELECT 
+          u.id as user_id,
+          u.email,
+          u.role,
+          u.is_active,
+          u.email_verified,
+          u.auth_provider,
+          p.id as profile_id,
+          p.full_name,
+          p.education_level,
+          p.academic_stage,
+          p.institution,
+          p.department,
+          p.current_year,
+          p.student_identifier
+        FROM users u
+        LEFT JOIN student_profiles p ON p.user_id = u.id
+        WHERE u.id = $1
+        LIMIT 1;
+      `;
 
     const res = await pool.query(queryText, [userId]);
     if (res.rows.length === 0) {
@@ -173,10 +273,15 @@ export class UserRepository {
         full_name: row.full_name,
         education_level: row.education_level || null,
         academic_stage: row.academic_stage || null,
+        program: row.program || null,
+        stream: row.stream || null,
+        target_exam: row.target_exam || null,
         institution: row.institution,
         department: row.department,
         current_year: row.current_year,
         student_identifier: row.student_identifier,
+        has_completed_onboarding: Boolean(row.has_completed_onboarding),
+        onboarding_completed_at: row.onboarding_completed_at ? new Date(row.onboarding_completed_at) : null,
       },
     };
   }
@@ -224,20 +329,16 @@ export class UserRepository {
       throw new Error('DATABASE_NOT_CONFIGURED');
     }
 
-    let finalPasswordHash = passwordHash;
-    if (!finalPasswordHash && input.password) {
-      finalPasswordHash = await hashPassword(input.password);
-    }
+    const normalizedEmail = input.email.trim().toLowerCase();
+    const finalPasswordHash = passwordHash || (await hashPassword(input.password));
 
-    const MAX_RETRIES = 5;
     let lastError: any = null;
 
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    // Retry loop specifically for candidate Learner ID uniqueness collisions
+    for (let attempt = 0; attempt < 5; attempt++) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-
-        const normalizedEmail = input.email.trim().toLowerCase();
 
         // 1. Insert user
         const userRes = await client.query<{
@@ -275,32 +376,69 @@ export class UserRepository {
         // Generate unique candidate Learner ID
         const candidateLearnerId = await this.generateUniqueLearnerId(client);
 
-        // 2. Insert corresponding student profile with permanent system-generated Learner ID
-        const profileRes = await client.query<{
-          id: string;
-          full_name: string;
-          education_level: string | null;
-          academic_stage: string | null;
-          institution: string | null;
-          department: string | null;
-          current_year: number | null;
-          student_identifier: string;
-        }>(
-          `INSERT INTO student_profiles (user_id, full_name, education_level, academic_stage, institution, department, current_year, student_identifier)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-           RETURNING id, full_name, education_level, academic_stage, institution, department, current_year, student_identifier;`,
-          [
-            newUser.id,
-            input.full_name.trim(),
-            educationLevel,
-            academicStage,
-            input.institution ? input.institution.trim() : null,
-            input.department ? input.department.trim() : null,
-            currentYear,
-            candidateLearnerId,
-          ]
-        );
-        const newProfile = profileRes.rows[0];
+        const hasExt = await this.checkExtendedCols(client);
+
+        let newProfile: any;
+
+        if (hasExt) {
+          const profileRes = await client.query<{
+            id: string;
+            full_name: string;
+            education_level: string | null;
+            academic_stage: string | null;
+            program: string | null;
+            stream: string | null;
+            institution: string | null;
+            department: string | null;
+            current_year: number | null;
+            student_identifier: string;
+            has_completed_onboarding: boolean;
+            onboarding_completed_at: Date | null;
+          }>(
+            `INSERT INTO student_profiles (user_id, full_name, education_level, academic_stage, institution, department, current_year, student_identifier, program, stream)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             RETURNING id, full_name, education_level, academic_stage, program, stream, institution, department, current_year, student_identifier, has_completed_onboarding, onboarding_completed_at;`,
+            [
+              newUser.id,
+              input.full_name.trim(),
+              educationLevel,
+              academicStage,
+              input.institution ? input.institution.trim() : null,
+              input.department ? input.department.trim() : null,
+              currentYear,
+              candidateLearnerId,
+              input.program ? input.program.trim() : null,
+              input.stream ? input.stream.trim() : null,
+            ]
+          );
+          newProfile = profileRes.rows[0];
+        } else {
+          const profileRes = await client.query<{
+            id: string;
+            full_name: string;
+            education_level: string | null;
+            academic_stage: string | null;
+            institution: string | null;
+            department: string | null;
+            current_year: number | null;
+            student_identifier: string;
+          }>(
+            `INSERT INTO student_profiles (user_id, full_name, education_level, academic_stage, institution, department, current_year, student_identifier)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             RETURNING id, full_name, education_level, academic_stage, institution, department, current_year, student_identifier;`,
+            [
+              newUser.id,
+              input.full_name.trim(),
+              educationLevel,
+              academicStage,
+              input.institution ? input.institution.trim() : null,
+              input.department ? input.department.trim() : null,
+              currentYear,
+              candidateLearnerId,
+            ]
+          );
+          newProfile = profileRes.rows[0];
+        }
 
         await client.query('COMMIT');
 
@@ -316,10 +454,15 @@ export class UserRepository {
             full_name: newProfile.full_name,
             education_level: newProfile.education_level,
             academic_stage: newProfile.academic_stage,
+            program: newProfile.program || null,
+            stream: newProfile.stream || null,
+            target_exam: newProfile.target_exam || null,
             institution: newProfile.institution,
             department: newProfile.department,
             current_year: newProfile.current_year,
             student_identifier: newProfile.student_identifier,
+            has_completed_onboarding: Boolean(newProfile.has_completed_onboarding),
+            onboarding_completed_at: newProfile.onboarding_completed_at ? new Date(newProfile.onboarding_completed_at) : null,
           },
         };
       } catch (err: any) {
@@ -352,18 +495,6 @@ export class UserRepository {
           continue;
         }
 
-        // General 23505 fallback
-        if (err.code === '23505') {
-          const existingUser = await this.findByEmail(input.email);
-          if (existingUser) {
-            const error = new Error('An account with this email address already exists.');
-            (error as any).code = 'DUPLICATE_EMAIL';
-            throw error;
-          }
-          lastError = err;
-          continue;
-        }
-
         throw err;
       } finally {
         client.release();
@@ -383,6 +514,8 @@ export class UserRepository {
       throw new Error('DATABASE_NOT_CONFIGURED');
     }
 
+    const hasExt = await this.checkExtendedCols(pool);
+
     const updates: string[] = [];
     const values: any[] = [];
     let idx = 1;
@@ -399,6 +532,18 @@ export class UserRepository {
       updates.push(`academic_stage = $${idx++}`);
       values.push(data.academic_stage ? data.academic_stage.trim() : null);
     }
+    if (hasExt && data.program !== undefined) {
+      updates.push(`program = $${idx++}`);
+      values.push(data.program ? data.program.trim() : null);
+    }
+    if (hasExt && data.stream !== undefined) {
+      updates.push(`stream = $${idx++}`);
+      values.push(data.stream ? data.stream.trim() : null);
+    }
+    if (hasExt && data.target_exam !== undefined) {
+      updates.push(`target_exam = $${idx++}`);
+      values.push(data.target_exam ? data.target_exam.trim() : null);
+    }
     if (data.institution !== undefined) {
       updates.push(`institution = $${idx++}`);
       values.push(data.institution ? data.institution.trim() : null);
@@ -410,6 +555,69 @@ export class UserRepository {
     if (data.current_year !== undefined) {
       updates.push(`current_year = $${idx++}`);
       values.push(data.current_year);
+    }
+
+    if (updates.length > 0) {
+      updates.push(`updated_at = NOW()`);
+      values.push(userId);
+      const sql = `UPDATE student_profiles SET ${updates.join(', ')} WHERE user_id = $${idx};`;
+      await pool.query(sql, values);
+    }
+
+    return this.findById(userId);
+  }
+
+  /**
+   * Completes first-time onboarding for student, sets has_completed_onboarding = true,
+   * updates academic curriculum preferences, and records completion timestamp.
+   */
+  async completeOnboarding(
+    userId: string,
+    data?: CompleteOnboardingInput
+  ): Promise<SafeStudentUser | null> {
+    const pool = getPool();
+    if (!pool) {
+      throw new Error('DATABASE_NOT_CONFIGURED');
+    }
+
+    const hasExt = await this.checkExtendedCols(pool);
+
+    const updates: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (hasExt) {
+      updates.push(`has_completed_onboarding = true`);
+      updates.push(`onboarding_completed_at = NOW()`);
+    }
+
+    if (data?.education_level !== undefined) {
+      updates.push(`education_level = $${idx++}`);
+      values.push(data.education_level.trim());
+    }
+    if (data?.academic_stage !== undefined) {
+      updates.push(`academic_stage = $${idx++}`);
+      values.push(data.academic_stage.trim());
+    }
+    if (hasExt && data?.program !== undefined) {
+      updates.push(`program = $${idx++}`);
+      values.push(data.program ? data.program.trim() : null);
+    }
+    if (hasExt && data?.stream !== undefined) {
+      updates.push(`stream = $${idx++}`);
+      values.push(data.stream ? data.stream.trim() : null);
+    }
+    if (hasExt && data?.target_exam !== undefined) {
+      updates.push(`target_exam = $${idx++}`);
+      values.push(data.target_exam ? data.target_exam.trim() : null);
+    }
+    if (data?.institution !== undefined) {
+      updates.push(`institution = $${idx++}`);
+      values.push(data.institution ? data.institution.trim() : null);
+    }
+    if (data?.department !== undefined) {
+      updates.push(`department = $${idx++}`);
+      values.push(data.department ? data.department.trim() : null);
     }
 
     if (updates.length > 0) {

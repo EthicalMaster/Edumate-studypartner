@@ -308,6 +308,26 @@ export const QuizSetupView: React.FC<QuizSetupViewProps> = ({ onPaperCreated, on
           </div>
         </div>
 
+        {/* Academic Curriculum Context Badge */}
+        {meta?.curriculum_context && (
+          <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-2xl flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[20px] text-blue-600">verified</span>
+              <div>
+                <span className="text-[12px] font-bold text-blue-950">
+                  Curriculum Context: {meta.curriculum_context.program} • {meta.curriculum_context.stream}
+                </span>
+                <p className="text-[11px] text-blue-700">
+                  {meta.curriculum_context.total_eligible_subjects} eligible subjects strictly grounded in your academic stage ({meta.curriculum_context.academic_stage}).
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold bg-blue-600 text-white px-2.5 py-0.5 rounded-full">
+              Personalized
+            </span>
+          </div>
+        )}
+
         {/* Subject and Topic for Question Bank */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
