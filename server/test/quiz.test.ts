@@ -23,7 +23,7 @@ function record(num: number, name: string, passed: boolean, details?: string) {
 
 async function runQuizTests() {
   console.log('====================================================');
-  console.log('EDUMATE PHASE 4: QUIZ ENGINE & CSPRNG RANDOMIZATION TESTS');
+  console.log('AVEN PHASE 4: QUIZ ENGINE & CSPRNG RANDOMIZATION TESTS');
   console.log('====================================================');
 
   // Test 1: Cryptographically Secure Fisher-Yates Randomization

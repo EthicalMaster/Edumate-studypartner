@@ -180,7 +180,7 @@ export const AuthView: React.FC = () => {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#0051d5] shadow-lg shadow-blue-600/30 text-white mb-3">
             <span className="material-symbols-outlined text-[32px]">school</span>
           </div>
-          <h1 className="text-[26px] font-bold tracking-tight text-white font-['Inter']">EDUMATE</h1>
+          <h1 className="text-[26px] font-bold tracking-tight text-white font-['Inter']">AVEN</h1>
           <p className="text-[13px] text-[#93a7cf] mt-1">AI-Powered Study & Mastery Platform</p>
         </div>
 

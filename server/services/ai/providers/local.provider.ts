@@ -4,7 +4,7 @@
  */
 
 /**
- * EDUMATE Phase 8: Local AI Provider Adapter Boundary
+ * AVEN Phase 8: Local AI Provider Adapter Boundary
  *
  * Prepares the architectural boundary for future self-hosted local model inference
  * (e.g. Ollama, vLLM, llama.cpp HTTP server).

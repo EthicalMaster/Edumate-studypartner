@@ -169,7 +169,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
             </div>
             <div>
               <h2 className="text-[17px] font-bold text-slate-100 tracking-tight">
-                EDUMATE Academic Onboarding
+                AVEN Academic Onboarding
               </h2>
               <p className="text-[12px] text-slate-400">Step {step} of 6</p>
             </div>
@@ -209,10 +209,10 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
                 <span>Personalized Learning Environment</span>
               </div>
               <h3 className="text-[22px] font-extrabold text-white tracking-tight">
-                Welcome to EDUMATE, {user?.profile?.full_name || 'Learner'}!
+                Welcome to AVEN, {user?.profile?.full_name || 'Learner'}!
               </h3>
               <p className="text-[14px] text-slate-300 leading-relaxed">
-                EDUMATE is an intelligent, curriculum-grounded learning companion designed to help you master concepts faster, retain knowledge longer, and perform at your highest potential.
+                AVEN is an intelligent, curriculum-grounded learning companion designed to help you master concepts faster, retain knowledge longer, and perform at your highest potential.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2">
@@ -267,7 +267,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
                   Configure Your Academic Hierarchy
                 </h3>
                 <p className="text-[13px] text-slate-400 mt-1">
-                  EDUMATE configures your available subjects, question bank papers, and AI assistance based on your exact academic program.
+                  AVEN configures your available subjects, question bank papers, and AI assistance based on your exact academic program.
                 </p>
               </div>
 
@@ -398,7 +398,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
                 Your Private Document Intelligence Vault
               </h3>
               <p className="text-[13px] text-slate-300 leading-relaxed">
-                Upload your course syllabi, lecture slides, professor notes, and reference PDFs. EDUMATE automatically normalizes, hierarchically chunks, and vectorizes them for semantic retrieval.
+                Upload your course syllabi, lecture slides, professor notes, and reference PDFs. AVEN automatically normalizes, hierarchically chunks, and vectorizes them for semantic retrieval.
               </p>
 
               <div className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700 space-y-3">
@@ -487,7 +487,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
                 Retention Stability & Targeted Remediation
               </h3>
               <p className="text-[13px] text-slate-300 leading-relaxed">
-                EDUMATE automatically diagnoses weak topics from quiz performance and recommends high-impact review drills before you forget.
+                AVEN automatically diagnoses weak topics from quiz performance and recommends high-impact review drills before you forget.
               </p>
 
               <div className="p-4 rounded-2xl bg-slate-800/70 border border-slate-700 space-y-3">

@@ -4,7 +4,7 @@
  */
 
 /**
- * EDUMATE Phase 8: AI Gateway Routes
+ * AVEN Phase 8: AI Gateway Routes
  *
  * Minimal development and diagnostic endpoints for verifying the AI Gateway.
  * Strictly requires active student authentication.

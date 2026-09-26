@@ -32,7 +32,7 @@ async function test(name: string, fn: () => Promise<void> | void): Promise<void>
 }
 
 async function runTests(): Promise<void> {
-  console.log('=== EDUMATE Phase 7 Python Embedding Runner Test Suite ===\n');
+  console.log('=== AVEN Phase 7 Python Embedding Runner Test Suite ===\n');
 
   const tmpMockScriptPath = path.resolve(process.cwd(), 'temp-mock-embedder.py');
 

@@ -4,7 +4,7 @@
  */
 
 /**
- * EDUMATE Phase 8: AI Provider Registry
+ * AVEN Phase 8: AI Provider Registry
  *
  * Manages available IAIProvider instances and resolves the active provider based
  * strictly on server-side configuration.

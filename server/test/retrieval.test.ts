@@ -38,7 +38,7 @@ async function test(name: string, fn: () => Promise<void> | void) {
   }
 }
 
-console.log('\n=== EDUMATE Phase 7 Final Verification Test Suite ===\n');
+console.log('\n=== AVEN Phase 7 Final Verification Test Suite ===\n');
 
 async function runTests() {
   // --------------------------------------------------------------------------

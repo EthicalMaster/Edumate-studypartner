@@ -85,7 +85,7 @@ export const HIGHER_SECONDARY_OR_COLLEGE_CHEMISTRY_TOPICS = [
   'Electrochemistry',
 ];
 
-// Available Subjects in EDUMATE curriculum question bank
+// Available Subjects in AVEN curriculum question bank
 export const ALL_SYSTEM_SUBJECTS = [
   'Physics',
   'Chemistry',

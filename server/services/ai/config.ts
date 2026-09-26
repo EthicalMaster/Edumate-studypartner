@@ -4,7 +4,7 @@
  */
 
 /**
- * EDUMATE Phase 8: AI Gateway Configuration
+ * AVEN Phase 8: AI Gateway Configuration
  *
  * Reads server environment settings for the AI Gateway and bridges to quota governance.
  */

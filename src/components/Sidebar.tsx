@@ -61,7 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="flex flex-col">
                 <div className="flex items-center gap-1">
                   <span className="text-[18px] font-bold tracking-tight text-white font-['Inter']">
-                    EDUMATE
+                    AVEN
                   </span>
                   <span className="material-symbols-outlined text-[#dbe1ff] text-[16px]">
                     auto_awesome

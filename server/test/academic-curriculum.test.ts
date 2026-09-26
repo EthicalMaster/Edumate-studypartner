@@ -39,7 +39,7 @@ function record(num: number, name: string, passed: boolean, message?: string) {
 
 async function runAcademicCurriculumTests() {
   console.log('====================================================');
-  console.log('EDUMATE PHASE 10B: ACADEMIC PERSONALIZATION & ONBOARDING');
+  console.log('AVEN PHASE 10B: ACADEMIC PERSONALIZATION & ONBOARDING');
   console.log('====================================================\n');
 
   // --------------------------------------------------------------------------

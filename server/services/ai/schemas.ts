@@ -4,7 +4,7 @@
  */
 
 /**
- * EDUMATE Phase 9: Reusable Structured Output Schemas
+ * AVEN Phase 9: Reusable Structured Output Schemas
  *
  * Provides strongly-typed Zod schemas for structured educational generations.
  * Guarantees zero parsing of arbitrary or unvalidated natural language when

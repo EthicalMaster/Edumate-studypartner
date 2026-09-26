@@ -281,7 +281,7 @@ export const INITIAL_AUDIO_TRACK: AudioSummaryTrack = {
     {
       speaker: 'Host Alex (AI)',
       timestamp: '00:00',
-      text: "Welcome back to EduMate Micro-Pods! Today, Sam and I are breaking down Gauss's Law and why students constantly trip over spherical shell potentials."
+      text: "Welcome back to AVEN Micro-Pods! Today, Sam and I are breaking down Gauss's Law and why students constantly trip over spherical shell potentials."
     },
     {
       speaker: 'Host Sam (AI)',

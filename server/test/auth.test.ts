@@ -47,7 +47,7 @@ function assert(condition: boolean, message: string) {
 
 async function runAuthTests() {
   console.log('====================================================');
-  console.log('EDUMATE PHASE 3: AUTHENTICATION SYSTEM TESTS');
+  console.log('AVEN PHASE 3: AUTHENTICATION SYSTEM TESTS');
   console.log('====================================================\n');
 
   // Load migration DDL

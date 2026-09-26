@@ -126,26 +126,26 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', async () => {
-    console.log(`[EDUMATE] Server running on http://0.0.0.0:${PORT}`);
+    console.log(`[AVEN] Server running on http://0.0.0.0:${PORT}`);
     try {
       const dbConnected = await checkConnection();
       if (dbConnected) {
-        console.log('[EDUMATE] PostgreSQL database connection verified.');
+        console.log('[AVEN] PostgreSQL database connection verified.');
       } else {
-        console.warn('[EDUMATE] Running without PostgreSQL connection (check DATABASE_URL).');
+        console.warn('[AVEN] Running without PostgreSQL connection (check DATABASE_URL).');
       }
     } catch (err) {
-      console.warn('[EDUMATE] Database health check warning:', err);
+      console.warn('[AVEN] Database health check warning:', err);
     }
 
     // Asynchronously pre-warm the real BGE embedding engine without blocking HTTP or DB startup
     pythonEmbeddingRunner.waitUntilReady().catch((err) => {
-      console.warn(`[EDUMATE] Asynchronous BGE embedding engine pre-warm warning: ${err.message}`);
+      console.warn(`[AVEN] Asynchronous BGE embedding engine pre-warm warning: ${err.message}`);
     });
   });
 }
 
 startServer().catch((err) => {
-  console.error('[EDUMATE] Failed to start server:', err);
+  console.error('[AVEN] Failed to start server:', err);
   process.exit(1);
 });

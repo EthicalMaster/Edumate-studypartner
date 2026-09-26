@@ -44,7 +44,7 @@ function assert(condition: boolean, message: string) {
 
 async function runDocumentIntelligenceTests() {
   console.log('====================================================');
-  console.log('EDUMATE PHASE 6: DOCUMENT INTELLIGENCE FOUNDATION');
+  console.log('AVEN PHASE 6: DOCUMENT INTELLIGENCE FOUNDATION');
   console.log('====================================================\n');
 
   const migrations = [

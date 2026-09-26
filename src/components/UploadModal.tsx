@@ -140,7 +140,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             <div>
               <h3 className="text-[17px] font-bold text-[#0b1c30]">Upload Study Material</h3>
               <p className="text-[12px] text-[#44474d]">
-                Store documents safely in your personal EDUMATE library
+                Store documents safely in your personal AVEN library
               </p>
             </div>
           </div>

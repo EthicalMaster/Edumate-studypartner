@@ -27,7 +27,7 @@ function record(num: number, name: string, passed: boolean, details?: string) {
 
 async function runCurriculumTests() {
   console.log('====================================================');
-  console.log('EDUMATE EXPANDED CURRICULUM QUESTION BANK VALIDATION');
+  console.log('AVEN EXPANDED CURRICULUM QUESTION BANK VALIDATION');
   console.log('====================================================');
 
   // Test 1: Full In-Memory Schema Validation

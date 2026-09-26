@@ -30,7 +30,7 @@ function record(num: number, name: string, passed: boolean, details?: string) {
 
 async function runVerification() {
   console.log('====================================================');
-  console.log('EDUMATE POSTGRESQL DATABASE & SCHEMA VERIFICATION');
+  console.log('AVEN POSTGRESQL DATABASE & SCHEMA VERIFICATION');
   console.log('====================================================');
 
   const migrationSql = fs.readFileSync(

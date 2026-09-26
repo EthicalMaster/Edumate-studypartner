@@ -4,7 +4,7 @@
  */
 
 /**
- * EDUMATE Phase 8: Normalized AI Gateway Errors
+ * AVEN Phase 8: Normalized AI Gateway Errors
  *
  * Prevents leaking raw internal stack traces, DB strings, or provider secrets to clients.
  */

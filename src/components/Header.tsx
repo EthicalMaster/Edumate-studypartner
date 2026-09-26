@@ -70,7 +70,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="w-8 h-8 rounded-lg bg-[#0051d5] flex items-center justify-center text-white">
             <span className="material-symbols-outlined text-[18px]">school</span>
           </div>
-          <span className="font-bold text-[18px] text-[#0b1c30] tracking-tight">EDUMATE</span>
+          <span className="font-bold text-[18px] text-[#0b1c30] tracking-tight">AVEN</span>
         </div>
 
         {/* Desktop Search Bar */}
@@ -112,7 +112,7 @@ export const Header: React.FC<HeaderProps> = ({
         {onOpenOnboarding && (
           <button
             onClick={onOpenOnboarding}
-            title="Open EDUMATE Academic Curriculum & Onboarding Guide"
+            title="Open AVEN Academic Curriculum & Onboarding Guide"
             className="hidden md:inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[12px] font-semibold px-2.5 py-1.5 rounded-xl transition-all border border-slate-300"
           >
             <span className="material-symbols-outlined text-[17px] text-blue-600">help_center</span>

@@ -4,9 +4,9 @@
  */
 
 /**
- * EDUMATE Phase 8: Model-Agnostic AI Gateway Service
+ * AVEN Phase 8: Model-Agnostic AI Gateway Service
  *
- * Sits strictly between EDUMATE application logic and model inference providers.
+ * Sits strictly between AVEN application logic and model inference providers.
  *
  * Core Responsibilities:
  * 1. Enforces mandatory session-authenticated student identity

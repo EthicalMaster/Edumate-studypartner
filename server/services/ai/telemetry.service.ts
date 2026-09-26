@@ -4,7 +4,7 @@
  */
 
 /**
- * EDUMATE Phase 8: Lightweight AI Gateway Telemetry
+ * AVEN Phase 8: Lightweight AI Gateway Telemetry
  *
  * Tracks performance and operational metrics for AI requests.
  *

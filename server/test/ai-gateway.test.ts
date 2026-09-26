@@ -4,7 +4,7 @@
  */
 
 /**
- * EDUMATE Phase 8: AI Gateway Automated Verification Suite
+ * AVEN Phase 8: AI Gateway Automated Verification Suite
  *
  * Verifies all 20 Phase 8 requirements:
  * 1. Gateway rejects unauthenticated requests (401)
@@ -131,7 +131,7 @@ class MockFailingProvider implements IAIProvider {
 }
 
 async function runAllTests() {
-  console.log('=== EDUMATE Phase 8: AI Gateway Automated Verification Suite ===\n');
+  console.log('=== AVEN Phase 8: AI Gateway Automated Verification Suite ===\n');
 
   // Reset environment and telemetry
   process.env.AI_PROVIDER = 'none';

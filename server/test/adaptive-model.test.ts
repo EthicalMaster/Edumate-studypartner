@@ -39,7 +39,7 @@ function record(num: number, name: string, passed: boolean, details?: string) {
 
 async function runAdaptiveModelTests() {
   console.log('====================================================');
-  console.log('EDUMATE PHASE 11: ADAPTIVE STUDENT MODEL TEST SUITE');
+  console.log('AVEN PHASE 11: ADAPTIVE STUDENT MODEL TEST SUITE');
   console.log('====================================================\n');
 
   // TEST 1: Pure Deterministic Confidence Calculation

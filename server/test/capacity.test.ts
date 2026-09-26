@@ -139,7 +139,7 @@ async function runHttpConcurrencyLevel(
             path: ep.path,
             method: ep.method,
             headers: {
-              'User-Agent': 'EDUMATE-Capacity-Benchmark/1.0',
+              'User-Agent': 'AVEN-Capacity-Benchmark/1.0',
               Accept: 'application/json',
             },
           },
@@ -199,7 +199,7 @@ async function runVectorMicrobenchmark() {
   console.log('SECTION 1: VECTOR RETRIEVAL MICROBENCHMARK');
   console.log('========================================================================');
   console.log('NOTE: Isolated in-memory vector index microbenchmark.');
-  console.log('WARNING: Do NOT use this microbenchmark RPS as the EDUMATE simultaneous-user capacity.');
+  console.log('WARNING: Do NOT use this microbenchmark RPS as the AVEN simultaneous-user capacity.');
 
   // Temporarily permit fallback for isolated microbenchmark
   embeddingService.setAllowTestFallback(true);
@@ -294,7 +294,7 @@ async function runVectorMicrobenchmark() {
 
 export async function runCapacityBenchmark() {
   console.log('\n========================================================================');
-  console.log('   EDUMATE PHASE 7 — FULL CAPACITY & REAL INFRASTRUCTURE BENCHMARK       ');
+  console.log('   AVEN PHASE 7 — FULL CAPACITY & REAL INFRASTRUCTURE BENCHMARK          ');
   console.log('========================================================================\n');
 
   const cpuStart = process.cpuUsage();
@@ -319,10 +319,10 @@ export async function runCapacityBenchmark() {
   console.log(`- Embedding Fallback Switch: EMBEDDING_ALLOW_TEST_FALLBACK=${process.env.EMBEDDING_ALLOW_TEST_FALLBACK || 'false'}`);
 
   // --------------------------------------------------------------------------
-  // SECTION 2: REAL EDUMATE API HTTP CONCURRENCY
+  // SECTION 2: REAL AVEN API HTTP CONCURRENCY
   // --------------------------------------------------------------------------
   console.log('\n========================================================================');
-  console.log('SECTION 2: REAL EDUMATE API CONCURRENCY (HTTP Server localhost:3000)');
+  console.log('SECTION 2: REAL AVEN API CONCURRENCY (HTTP Server localhost:3000)');
   console.log('========================================================================');
   console.log('Workload: Real authenticated/unauthenticated API calls (/health, /auth/me, /materials, /quizzes, /leaderboard, /quotas)');
 
@@ -347,7 +347,7 @@ export async function runCapacityBenchmark() {
       console.log(`Done. (RPS: ${res.rps}, p50: ${res.p50Ms}ms, p95: ${res.p95Ms}ms, Max: ${res.maxMs}ms)`);
     }
 
-    console.log('\n--- Real EDUMATE API Concurrency Summary Table ---');
+    console.log('\n--- Real AVEN API Concurrency Summary Table ---');
     console.log('| Users | Total Req |   RPS   | Success (2xx) | Errors (4xx/5xx) | Timeouts | Error Rate |   p50 (ms)  |   p95 (ms)  |   p99 (ms)  |   Max (ms)  |');
     console.log('|------:|----------:|--------:|--------------:|-----------------:|---------:|-----------:|------------:|------------:|------------:|------------:|');
     for (const r of apiResults) {

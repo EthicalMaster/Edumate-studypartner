@@ -143,7 +143,7 @@ async function runConcurrencyLevel(
 
 async function runLoadTests() {
   console.log('========================================================================');
-  console.log('   EDUMATE PHASE 7: CONCURRENCY & LOCAL CAPACITY BASELINE BENCHMARK     ');
+  console.log('   AVEN PHASE 7: CONCURRENCY & LOCAL CAPACITY BASELINE BENCHMARK        ');
   console.log('========================================================================\n');
 
   // Allow test fallback for fast, reproducible local benchmark runs

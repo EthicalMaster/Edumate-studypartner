@@ -23,7 +23,7 @@ function record(num: number, name: string, passed: boolean, details?: string) {
 
 async function runLeaderboardTests() {
   console.log('====================================================');
-  console.log('EDUMATE PHASE 4: LEADERBOARD CALCULATION & PRIVACY TESTS');
+  console.log('AVEN PHASE 4: LEADERBOARD CALCULATION & PRIVACY TESTS');
   console.log('====================================================');
 
   const repo = new LeaderboardRepository();

@@ -4,7 +4,7 @@
  */
 
 /**
- * EDUMATE Phase 8: AI Provider Abstraction Interface
+ * AVEN Phase 8: AI Provider Abstraction Interface
  *
  * All AI model providers (development, local HTTP, future inference servers)
  * must conform to this interface. No provider-specific SDK types are permitted.

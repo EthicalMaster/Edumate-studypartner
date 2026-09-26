@@ -39,7 +39,7 @@ function assert(condition: boolean, message: string) {
 
 async function runMaterialTests() {
   console.log('====================================================');
-  console.log('EDUMATE PHASE 5: STUDY MATERIALS & STORAGE TESTS');
+  console.log('AVEN PHASE 5: STUDY MATERIALS & STORAGE TESTS');
   console.log('====================================================\n');
 
   // Load migrations 001 through 007

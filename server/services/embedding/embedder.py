@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-EDUMATE Phase 7 - Standalone SentenceTransformers / BAAI/bge-small-en-v1.5 Embedder
+AVEN Phase 7 - Standalone SentenceTransformers / BAAI/bge-small-en-v1.5 Embedder
 Self-hosted embedding generator with CUDA acceleration and graceful CPU fallback.
 """
 

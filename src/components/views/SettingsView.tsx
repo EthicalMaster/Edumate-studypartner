@@ -105,11 +105,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenOnboarding }) 
     }
   };
 
-  const displayName = user?.profile?.full_name || 'EDUMATE Learner';
+  const displayName = user?.profile?.full_name || 'AVEN Learner';
   const stage = user?.profile?.academic_stage || (user?.profile?.current_year ? `Year ${user.profile.current_year}` : 'Active Learner');
   const levelOrDept = user?.profile?.program || user?.profile?.department || user?.profile?.education_level || 'General';
   const studentId = user?.profile?.student_identifier;
-  const userEmail = user?.email || 'user@edumate.internal';
+  const userEmail = user?.email || 'user@aven.internal';
 
   return (
     <div className="flex flex-col gap-6 pb-12 max-w-3xl mx-auto">

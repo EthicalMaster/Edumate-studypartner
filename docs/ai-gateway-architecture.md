@@ -1,8 +1,8 @@
-# EDUMATE Phase 8: Model-Agnostic AI Gateway Architecture
+# AVEN Phase 8: Model-Agnostic AI Gateway Architecture
 
 ## 1. Executive Summary & Purpose
 
-The **EDUMATE AI Gateway** (`server/services/ai/`) provides a secure, vendor-neutral, server-authoritative abstraction layer between EDUMATE application features and model inference backends. 
+The **AVEN AI Gateway** (`server/services/ai/`) provides a secure, vendor-neutral, server-authoritative abstraction layer between AVEN application features and model inference backends. 
 
 ### Core Architectural Guarantees:
 - **Vendor-Neutrality:** No proprietary AI provider SDKs (Gemini, OpenAI, Anthropic) are coupled into application code.
@@ -67,7 +67,7 @@ The **EDUMATE AI Gateway** (`server/services/ai/`) provides a secure, vendor-neu
 A strict boundary is maintained between vector retrieval and text generation:
 
 ```
-EDUMATE Architecture
+AVEN Architecture
  └── AI Gateway
       ├── Retrieval Layer (Phase 7 - Intact & Active)
       │    ├── Document Intelligence (PDF extraction, hierarchical sectioning, chunking)
@@ -81,7 +81,7 @@ EDUMATE Architecture
 **Key Architectural Invariants:**
 - Retrieval layer remains fully independent of any LLM generation provider.
 - Text embeddings and Qdrant vector search strictly use BAAI/bge-small-en-v1.5 (384 dimensions).
-- The AI Gateway remains completely model-agnostic, enabling future drop-in addition of generation models without modifying EDUMATE core feature logic.
+- The AI Gateway remains completely model-agnostic, enabling future drop-in addition of generation models without modifying AVEN core feature logic.
 
 ---
 
@@ -222,7 +222,7 @@ All gateway failures are normalized into subclasses of `AIGatewayError` to ensur
 
 ## 8. Structured Educational Output Schemas (Phase 9)
 
-To prevent brittle parsing of arbitrary natural language, EDUMATE utilizes typed Zod schemas (`server/services/ai/schemas.ts`) through `aiGatewayService.executeStructured`:
+To prevent brittle parsing of arbitrary natural language, AVEN utilizes typed Zod schemas (`server/services/ai/schemas.ts`) through `aiGatewayService.executeStructured`:
 
 - `GenericGenerationResultSchema`: Provider, model, generated text, token usage metrics, latency, finish reason.
 - `QuizQuestionGenerationSchema`: Pedagogically sound questions with distinct options, correct key, explanation, and difficulty.

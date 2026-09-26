@@ -4,9 +4,9 @@
  */
 
 /**
- * EDUMATE Phase 8: Deterministic Null Development Provider
+ * AVEN Phase 8: Deterministic Null Development Provider
  *
- * Used for testing EDUMATE AI Gateway infrastructure without calling external models.
+ * Used for testing AVEN AI Gateway infrastructure without calling external models.
  * Strictly identifies itself as development/null and never pretends to be a real AI.
  */
 

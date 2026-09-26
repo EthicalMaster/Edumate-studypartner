@@ -4,7 +4,7 @@
  */
 
 /**
- * EDUMATE Phase 8: Model-Agnostic AI Gateway Application Types
+ * AVEN Phase 8: Model-Agnostic AI Gateway Application Types
  *
  * All types are strictly provider-neutral and application-level.
  * No provider SDKs (Gemini, OpenAI, Anthropic, etc.) are imported or exposed.

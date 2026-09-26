@@ -22,7 +22,7 @@ function record(num: number, name: string, passed: boolean, details?: string) {
 
 async function runAnalyticsTests() {
   console.log('====================================================');
-  console.log('EDUMATE PHASE 8.5: REAL-TIME LEARNING ANALYTICS TESTS');
+  console.log('AVEN PHASE 8.5: REAL-TIME LEARNING ANALYTICS TESTS');
   console.log('====================================================');
 
   const analyticsService = new AnalyticsService();
