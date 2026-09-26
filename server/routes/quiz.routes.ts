@@ -15,6 +15,7 @@ import {
 import { quizRepository } from '../repositories/quiz.repository.js';
 import { quizSessionRepository } from '../repositories/quiz_session.repository.js';
 import { scoringService } from '../services/scoring.service.js';
+import { notificationService } from '../services/notification.service.js';
 import { analyticsRepository } from '../repositories/analytics.repository.js';
 import { curriculumService, CurriculumIneligibleError } from '../services/curriculum.service.js';
 
@@ -338,6 +339,26 @@ quizRouter.post(
         studentId,
         req.body.submission_reason
       );
+
+      // Trigger real notification for quiz completion
+      notificationService.notifyQuizCompleted(
+        studentId,
+        detailedResult.quiz.title,
+        Number(detailedResult.result.score_obtained) || 0,
+        Math.round(Number(detailedResult.result.percentage) || 0),
+        detailedResult.result.total_questions
+      ).catch((nErr) => console.warn('[Quiz Routes] Notification trigger error:', nErr));
+
+      // Trigger weak topic alert if accuracy is below 70%
+      if (Number(detailedResult.result.percentage) < 70) {
+        notificationService.notifyWeakTopicDetected(
+          studentId,
+          detailedResult.quiz.subject,
+          detailedResult.quiz.topic,
+          Math.round(Number(detailedResult.result.percentage) || 0)
+        ).catch(() => {});
+      }
+
       res.json(detailedResult);
     } catch (err: any) {
       if (err.message?.startsWith('SESSION_NOT_FOUND:')) {

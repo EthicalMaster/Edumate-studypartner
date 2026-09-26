@@ -120,6 +120,7 @@ export interface DocumentSection {
   pageStart: number;
   pageEnd: number;
   headingLevel: number;
+  summary?: string;
 }
 
 export interface DocumentChunk {
@@ -204,10 +205,14 @@ export interface AudioSummaryTrack {
 export interface NotificationItem {
   id: string;
   title: string;
-  description: string;
+  description?: string;
+  message?: string;
   timeAgo: string;
-  read: boolean;
-  type: 'achievement' | 'reminder' | 'system';
+  read?: boolean;
+  isRead?: boolean;
+  type: string;
+  createdAt?: string;
+  metadata?: Record<string, any>;
 }
 
 export interface StudentProfile {

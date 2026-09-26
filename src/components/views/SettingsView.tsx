@@ -18,8 +18,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenOnboarding }) 
   const { user, refreshUser } = useAuth();
   const [dailyGoalTopics, setDailyGoalTopics] = useState(2);
   const [dailyGoalQuizzes, setDailyGoalQuizzes] = useState(1);
-  const [algorithm, setAlgorithm] = useState('FSRS-4');
-  const [voiceModel, setVoiceModel] = useState('Neural Duo (Alex & Sam)');
+  const [algorithm, setAlgorithm] = useState('SM-2');
   const [savedNotice, setSavedNotice] = useState(false);
 
   // Academic Profile State
@@ -304,10 +303,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenOnboarding }) 
         </div>
       </div>
 
-      {/* AI Synthesis & Voice Settings */}
+      {/* AI Synthesis & Retention Settings */}
       <div className="bg-white rounded-3xl p-6 border border-[#c5c6ce]/30 shadow-xs space-y-4">
         <h3 className="text-[16px] font-bold text-[#0b1c30] border-b border-[#c5c6ce]/20 pb-3">
-          AI Model & Synthesis Engines
+          Learning & Retention Engine
         </h3>
 
         <div className="space-y-3 text-[13px]">
@@ -320,25 +319,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenOnboarding }) 
               onChange={(e) => setAlgorithm(e.target.value)}
               className="w-full bg-[#eff4ff] border border-[#c5c6ce]/40 rounded-xl px-3.5 py-2.5 font-semibold text-[#0b1c30] outline-none"
             >
-              <option value="FSRS-4">FSRS-4 (Free Spaced Repetition Scheduler - Machine Learning)</option>
-              <option value="SM-2">SM-2 (SuperMemo Classic Interval)</option>
+              <option value="SM-2">SuperMemo SM-2 (Deterministic Interval Scaling - Active)</option>
+              <option value="FSRS-4">FSRS-4 (Free Spaced Repetition Scheduler)</option>
               <option value="Leitner">Leitner 5-Box System</option>
             </select>
-          </div>
-
-          <div>
-            <label className="text-[12px] font-bold text-[#44474d] block mb-1">
-              Audio Podcast Voice Persona
-            </label>
-            <select
-              value={voiceModel}
-              onChange={(e) => setVoiceModel(e.target.value)}
-              className="w-full bg-[#eff4ff] border border-[#c5c6ce]/40 rounded-xl px-3.5 py-2.5 font-semibold text-[#0b1c30] outline-none"
-            >
-              <option value="Neural Duo (Alex & Sam)">Two-Host Conversational AI (Alex & Sam)</option>
-              <option value="Professor AI (Formal)">Solo Academic Lecturer (Deep Clarity)</option>
-              <option value="Fast Review (Breezy)">High-Yield Speed Reviewer (1.5x Pace)</option>
-            </select>
+            <p className="text-[11px] text-[#75777e] mt-1.5">
+              SuperMemo SM-2 dynamically scales repetition intervals (1d → 3d → 8d...) based on recall feedback (Again, Hard, Good, Easy).
+            </p>
           </div>
         </div>
 

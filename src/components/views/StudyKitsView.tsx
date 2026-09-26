@@ -4,18 +4,20 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { StudyKit, ActiveNavTab, StudyMaterial, StudentQuotaUsage } from '../../types';
+import { StudyKit, ActiveNavTab, StudyMaterial, StudentQuotaUsage, QuestionBankMeta } from '../../types';
 import { materialApi } from '../../services/materialApi';
 import { retrievalApi } from '../../services/retrievalApi';
+import { quizApi } from '../../services/quizApi';
+import { analyticsApi, type SubjectProgressData } from '../../services/analyticsApi';
 import { DocumentInspectModal } from '../DocumentInspectModal';
 
 interface StudyKitsViewProps {
-  studyKits: StudyKit[];
-  onSelectKit: (kit: StudyKit) => void;
+  studyKits?: StudyKit[];
+  onSelectKit?: (kit: any) => void;
   onNavigate: (tab: ActiveNavTab) => void;
   onOpenUpload: () => void;
   onOpenSummary: () => void;
-  onPlayAudioTrack: () => void;
+  onPlayAudioTrack?: () => void;
   materialsRefreshTrigger?: number;
 }
 
@@ -39,6 +41,8 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
   const [inspectInitialTab, setInspectInitialTab] = useState<'sections' | 'chunks' | 'embeddings'>('sections');
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [quotaUsage, setQuotaUsage] = useState<StudentQuotaUsage | null>(null);
+  const [curriculumMeta, setCurriculumMeta] = useState<QuestionBankMeta | null>(null);
+  const [subjectProgress, setSubjectProgress] = useState<SubjectProgressData[]>([]);
 
   // Filters for Materials
   const [selectedSubject, setSelectedSubject] = useState<string>('All');
@@ -47,18 +51,26 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
 
   const subjects = ['All', 'Physics', 'Mathematics', 'Chemistry', 'Computer Science', 'General Studies'];
 
-  // Load Real Materials & Quotas
+  // Load Real Materials, Quotas, Curriculum & Analytics
   const fetchMaterials = useCallback(async () => {
     setIsLoadingMaterials(true);
     setMaterialsError(null);
     try {
-      const [matRes, quotaRes] = await Promise.all([
+      const [matRes, quotaRes, metaRes, dashRes] = await Promise.all([
         materialApi.getMaterials(),
         retrievalApi.getQuotas().catch(() => ({ usage: null })),
+        quizApi.getQuestionBankMeta().catch(() => null),
+        analyticsApi.getDashboard().catch(() => null),
       ]);
       setMaterials(matRes.materials || []);
       if (quotaRes && quotaRes.usage) {
         setQuotaUsage(quotaRes.usage);
+      }
+      if (metaRes) {
+        setCurriculumMeta(metaRes);
+      }
+      if (dashRes && dashRes.subjectProgress) {
+        setSubjectProgress(dashRes.subjectProgress);
       }
     } catch (err: any) {
       console.error('Failed to load materials:', err);
@@ -113,13 +125,13 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
     return matchSubject && matchStatus && matchSearch;
   });
 
-  // Filtered Curriculum Kits
-  const filteredKits = studyKits.filter((kit) => {
-    const matchSubject = selectedSubject === 'All' || kit.subject === selectedSubject;
+  // Real Filtered Curriculum Subjects
+  const availableCurriculumSubjects = curriculumMeta?.subjects || [];
+  const filteredCurriculumSubjects = availableCurriculumSubjects.filter((s) => {
+    const matchSubject = selectedSubject === 'All' || s.name.toLowerCase() === selectedSubject.toLowerCase();
     const matchSearch =
-      kit.title.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      kit.description.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      kit.tags.some((t) => t.toLowerCase().includes(searchFilter.toLowerCase()));
+      s.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
+      s.topics.some((t) => t.toLowerCase().includes(searchFilter.toLowerCase()));
     return matchSubject && matchSearch;
   });
 
@@ -206,7 +218,7 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
               activeSubTab === 'curriculum' ? 'bg-white/20 text-white' : 'bg-[#eff4ff] text-[#0051d5]'
             }`}
           >
-            {studyKits.length}
+            {availableCurriculumSubjects.length}
           </span>
         </button>
       </div>
@@ -627,90 +639,118 @@ export const StudyKitsView: React.FC<StudyKitsViewProps> = ({
       {/* ========================================================================= */}
       {activeSubTab === 'curriculum' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredKits.map((kit) => (
-            <div
-              key={kit.id}
-              className="bg-white rounded-2xl border border-[#c5c6ce]/40 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#eff4ff] text-[#0051d5]">
-                    {kit.subject} • {kit.unit}
-                  </span>
-                  <span className="text-[13px] font-bold text-[#0051d5]">
-                    {kit.progressPercent}% Mastery
-                  </span>
-                </div>
-
-                <h3 className="text-[17px] font-bold text-[#0b1c30] group-hover:text-[#0051d5] transition-colors line-clamp-1">
-                  {kit.title}
-                </h3>
-                <p className="text-[12px] text-[#44474d] mt-1 line-clamp-2 leading-relaxed">
-                  {kit.description}
-                </p>
-
-                <div className="w-full bg-[#eff4ff] h-2 rounded-full overflow-hidden mt-3">
-                  <div
-                    className="bg-[#0051d5] h-full rounded-full"
-                    style={{ width: `${kit.progressPercent}%` }}
-                  ></div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 py-3 mt-2 border-y border-[#c5c6ce]/20 text-center">
-                  <div>
-                    <span className="block text-[14px] font-bold text-[#0b1c30]">
-                      {kit.flashcardsCount}
-                    </span>
-                    <span className="text-[11px] text-[#75777e]">Flashcards</span>
-                  </div>
-                  <div>
-                    <span className="block text-[14px] font-bold text-[#0b1c30]">
-                      {kit.quizzesCount}
-                    </span>
-                    <span className="text-[11px] text-[#75777e]">Quizzes</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-1.5 mt-3">
-                  {kit.tags.map((tag, idx) => (
-                    <span
-                      key={idx}
-                      className="text-[10px] font-semibold text-[#44474d] bg-[#eff4ff] px-2 py-0.5 rounded-md"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
+          {filteredCurriculumSubjects.length === 0 ? (
+            <div className="col-span-full bg-white rounded-3xl border border-dashed border-[#c5c6ce] p-12 text-center flex flex-col items-center justify-center max-w-lg mx-auto">
+              <div className="w-16 h-16 rounded-3xl bg-[#eff4ff] text-[#0051d5] flex items-center justify-center mb-4 shadow-xs">
+                <span className="material-symbols-outlined text-[32px]">school</span>
               </div>
-
-              <div className="pt-4 mt-3 border-t border-[#c5c6ce]/20 flex items-center justify-between gap-2">
-                <button
-                  onClick={onOpenSummary}
-                  className="text-[12px] font-bold text-[#0051d5] hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[16px]">menu_book</span>
-                  <span>Summary</span>
-                </button>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => onNavigate('flashcards')}
-                    title="Practice Cards"
-                    className="p-2 rounded-xl bg-[#eff4ff] text-[#0051d5] hover:bg-[#dbe1ff] transition-colors cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">style</span>
-                  </button>
-                  <button
-                    onClick={() => onNavigate('quizzes')}
-                    title="Take Quiz"
-                    className="p-2 rounded-xl bg-[#eff4ff] text-[#0051d5] hover:bg-[#dbe1ff] transition-colors cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">quiz</span>
-                  </button>
-                </div>
-              </div>
+              <h3 className="text-[17px] font-bold text-[#0b1c30]">
+                No Matching Curriculum Subjects Found
+              </h3>
+              <p className="text-[13px] text-[#44474d] mt-1.5 max-w-sm leading-relaxed">
+                Subjects are calibrated to your authenticated academic profile. Try selecting "All" or adjusting your search.
+              </p>
             </div>
-          ))}
+          ) : (
+            filteredCurriculumSubjects.map((sub) => {
+              const progressObj = subjectProgress.find(
+                (p) => p.subject.toLowerCase() === sub.name.toLowerCase()
+              );
+              const accuracy = progressObj ? progressObj.accuracy : 0;
+              const hasAttempted = progressObj && progressObj.attempted > 0;
+              const quizzesTaken = progressObj ? progressObj.quizzesCount : 0;
+
+              return (
+                <div
+                  key={sub.name}
+                  className="bg-white rounded-2xl border border-[#c5c6ce]/40 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#eff4ff] text-[#0051d5]">
+                        {sub.name} • {sub.topics.length} Topic{sub.topics.length === 1 ? '' : 's'}
+                      </span>
+                      <span className="text-[13px] font-bold text-[#0051d5]">
+                        {hasAttempted ? `${accuracy}% Accuracy` : 'Not Started'}
+                      </span>
+                    </div>
+
+                    <h3 className="text-[17px] font-bold text-[#0b1c30] group-hover:text-[#0051d5] transition-colors line-clamp-1">
+                      {sub.name} Curriculum Kit
+                    </h3>
+                    <p className="text-[12px] text-[#44474d] mt-1 line-clamp-2 leading-relaxed">
+                      Official question bank curriculum calibrated to your academic stage, with {sub.total_questions} exam challenges.
+                    </p>
+
+                    <div className="w-full bg-[#eff4ff] h-2 rounded-full overflow-hidden mt-3">
+                      <div
+                        className="bg-[#0051d5] h-full rounded-full transition-all duration-300"
+                        style={{ width: `${hasAttempted ? Math.max(5, accuracy) : 0}%` }}
+                      ></div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 py-3 mt-2 border-y border-[#c5c6ce]/20 text-center">
+                      <div>
+                        <span className="block text-[14px] font-bold text-[#0b1c30]">
+                          {sub.total_questions}
+                        </span>
+                        <span className="text-[11px] text-[#75777e]">Questions</span>
+                      </div>
+                      <div>
+                        <span className="block text-[14px] font-bold text-[#0b1c30]">
+                          {quizzesTaken}
+                        </span>
+                        <span className="text-[11px] text-[#75777e]">Quizzes Taken</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 mt-3">
+                      {sub.topics.slice(0, 4).map((t, idx) => (
+                        <span
+                          key={idx}
+                          className="text-[10px] font-semibold text-[#44474d] bg-[#eff4ff] px-2 py-0.5 rounded-md"
+                        >
+                          #{t}
+                        </span>
+                      ))}
+                      {sub.topics.length > 4 && (
+                        <span className="text-[10px] font-medium text-[#75777e] px-1 py-0.5">
+                          +{sub.topics.length - 4} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-4 mt-3 border-t border-[#c5c6ce]/20 flex items-center justify-between gap-2">
+                    <button
+                      onClick={onOpenSummary}
+                      className="text-[12px] font-bold text-[#0051d5] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">menu_book</span>
+                      <span>Summary</span>
+                    </button>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => onNavigate('flashcards')}
+                        title="Practice Cards"
+                        className="p-2 rounded-xl bg-[#eff4ff] text-[#0051d5] hover:bg-[#dbe1ff] transition-colors cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">style</span>
+                      </button>
+                      <button
+                        onClick={() => onNavigate('quizzes')}
+                        title="Take Quiz"
+                        className="p-2 rounded-xl bg-[#eff4ff] text-[#0051d5] hover:bg-[#dbe1ff] transition-colors cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">quiz</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       )}
 

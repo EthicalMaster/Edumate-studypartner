@@ -9,6 +9,7 @@ interface HeaderProps {
   onSearchChange: (query: string) => void;
   notifications: NotificationItem[];
   onMarkAllNotificationsRead: () => void;
+  onMarkOneNotificationRead?: (id: string) => void;
   onOpenUpload: () => void;
   onOpenOnboarding?: () => void;
 }
@@ -19,6 +20,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSearchChange,
   notifications,
   onMarkAllNotificationsRead,
+  onMarkOneNotificationRead,
   onOpenUpload,
   onOpenOnboarding,
 }) => {
@@ -163,20 +165,49 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
 
               <div className="flex flex-col gap-2.5 mt-3 max-h-72 overflow-y-auto">
-                {notifications.map((n) => (
-                  <div
-                    key={n.id}
-                    className={`p-2.5 rounded-xl transition-colors ${
-                      n.read ? 'bg-transparent text-[#75777e]' : 'bg-[#eff4ff] text-[#0b1c30]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-[13px]">{n.title}</span>
-                      <span className="text-[11px] text-[#75777e]">{n.timeAgo}</span>
-                    </div>
-                    <p className="text-[12px] text-[#44474d] mt-1 leading-snug">{n.description}</p>
+                {notifications.length === 0 ? (
+                  <div className="py-8 text-center text-[#75777e] flex flex-col items-center justify-center">
+                    <span className="material-symbols-outlined text-[28px] text-[#0051d5] mb-1">
+                      notifications_none
+                    </span>
+                    <p className="text-[13px] font-bold text-[#0b1c30]">No notifications yet</p>
+                    <p className="text-[11px] text-[#75777e] mt-0.5 max-w-[200px]">
+                      Quiz completions, mastery milestones, and uploads will be logged here.
+                    </p>
                   </div>
-                ))}
+                ) : (
+                  notifications.map((n) => {
+                    const isUnread = !n.read && !n.isRead;
+                    return (
+                      <div
+                        key={n.id}
+                        onClick={() => {
+                          if (isUnread && onMarkOneNotificationRead) {
+                            onMarkOneNotificationRead(n.id);
+                          }
+                        }}
+                        className={`p-2.5 rounded-xl transition-all cursor-pointer border ${
+                          isUnread
+                            ? 'bg-[#eff4ff] border-[#0051d5]/20 text-[#0b1c30]'
+                            : 'bg-transparent border-transparent text-[#75777e] hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            {isUnread && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#0051d5] shrink-0" />
+                            )}
+                            <span className="font-semibold text-[13px] line-clamp-1">{n.title}</span>
+                          </div>
+                          <span className="text-[10px] text-[#75777e] shrink-0">{n.timeAgo}</span>
+                        </div>
+                        <p className="text-[12px] text-[#44474d] mt-1 leading-snug line-clamp-2">
+                          {n.message || n.description}
+                        </p>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           )}

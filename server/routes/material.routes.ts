@@ -17,6 +17,7 @@ import { embeddingQueueService } from '../services/embedding/embedding-queue.ser
 import { vectorRepository } from '../repositories/vector/qdrant.repository.js';
 import { embeddingRepository } from '../repositories/embedding.repository.js';
 import { analyticsRepository } from '../repositories/analytics.repository.js';
+import { notificationService } from '../services/notification.service.js';
 
 export const materialRouter = express.Router();
 
@@ -237,6 +238,12 @@ materialRouter.post(
             material_id: record.id,
             chunks: processResult?.totalChunks || 0,
           }).catch((err) => console.error('[Material Routes] Failed to log study_material_processed:', err));
+
+          notificationService.notifyMaterialProcessed(
+            studentId,
+            finalRecord.title,
+            processResult?.totalChunks || 0
+          ).catch(() => {});
         }
 
         if (processResult && processResult.chunks.length > 0) {

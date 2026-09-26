@@ -7,6 +7,8 @@ interface SidebarProps {
   onSelectTab: (tab: ActiveNavTab) => void;
   mobileOpen: boolean;
   onCloseMobile: () => void;
+  flashcardsCount?: number;
+  weakTopicsCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -14,6 +16,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTab,
   mobileOpen,
   onCloseMobile,
+  flashcardsCount = 0,
+  weakTopicsCount = 0,
 }) => {
   const { user } = useAuth();
   const studentName = user?.profile?.full_name || 'Student';
@@ -21,11 +25,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems: Array<{ id: ActiveNavTab; label: string; icon: string; badge?: string }> = [
     { id: 'home', label: 'Home', icon: 'space_dashboard' },
     { id: 'study-kits', label: 'Study Kits', icon: 'folder_special' },
-    { id: 'flashcards', label: 'Flashcards', icon: 'style', badge: '86' },
+    { id: 'flashcards', label: 'Flashcards', icon: 'style', badge: String(flashcardsCount ?? 0) },
     { id: 'quizzes', label: 'Quizzes', icon: 'quiz' },
     { id: 'my-progress', label: 'My Progress', icon: 'insights' },
     { id: 'adaptive-model', label: 'Adaptive Model', icon: 'psychology' },
-    { id: 'weak-topics', label: 'Weak Topics', icon: 'target', badge: '4' },
+    {
+      id: 'weak-topics',
+      label: 'Weak Topics',
+      icon: 'target',
+      badge: weakTopicsCount > 0 ? String(weakTopicsCount) : undefined,
+    },
     { id: 'peer-comparison', label: 'Peer Comparison', icon: 'leaderboard' },
   ];
 

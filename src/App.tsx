@@ -3,15 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
-import { ActiveNavTab, StudyKit, StudyMaterial, Flashcard, QuizQuestion, WeakTopic, NotificationItem } from './types';
-import {
-  INITIAL_STUDY_KITS,
-  INITIAL_FLASHCARDS,
-  INITIAL_QUIZ_QUESTIONS,
-  INITIAL_WEAK_TOPICS,
-  INITIAL_NOTIFICATIONS,
-} from './data/initialData';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ActiveNavTab, StudyMaterial, NotificationItem } from './types';
+import { notificationApi } from './services/notificationApi';
+import { analyticsApi } from './services/analyticsApi';
 
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthView } from './components/auth/AuthView';
@@ -37,12 +32,12 @@ function AuthenticatedApp() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // App Data State
-  const [studyKits, setStudyKits] = useState<StudyKit[]>(INITIAL_STUDY_KITS);
-  const [flashcards, setFlashcards] = useState<Flashcard[]>(INITIAL_FLASHCARDS);
-  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>(INITIAL_QUIZ_QUESTIONS);
-  const [weakTopics, setWeakTopics] = useState<WeakTopic[]>(INITIAL_WEAK_TOPICS);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+  // Authoritative Dashboard & Metric Counts
+  const [flashcardsCount, setFlashcardsCount] = useState<number>(0);
+  const [weakTopicsCount, setWeakTopicsCount] = useState<number>(0);
+
+  // Authoritative PostgreSQL Notification State
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   // Modals
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -50,82 +45,69 @@ function AuthenticatedApp() {
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [materialsRefreshTrigger, setMaterialsRefreshTrigger] = useState(0);
 
-  // Automatically prompt first-time onboarding if not yet completed
+  // Synchronize authenticated metrics & notifications from database
+  const refreshAuthoritativeData = useCallback(async () => {
+    try {
+      const [dashRes, notifsRes] = await Promise.all([
+        analyticsApi.getDashboard().catch(() => null),
+        notificationApi.getNotifications().catch(() => null),
+      ]);
+
+      if (dashRes) {
+        setFlashcardsCount(dashRes.flashcardsCount ?? 0);
+        setWeakTopicsCount(dashRes.weakTopics ? dashRes.weakTopics.length : 0);
+      }
+
+      if (notifsRes) {
+        setNotifications(notifsRes.notifications || []);
+      }
+    } catch (err) {
+      console.warn('[App] Real-data synchronization warning:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshAuthoritativeData();
+  }, [refreshAuthoritativeData]);
+
+  // Prompt onboarding if student hasn't completed it yet
   useEffect(() => {
     if (user && user.profile && user.profile.has_completed_onboarding === false) {
       setIsOnboardingOpen(true);
     }
   }, [user]);
 
-  // Handling new study material upload (Phase 5)
-  const handleMaterialUploaded = (mat: StudyMaterial) => {
+  // Handling new study material upload
+  const handleMaterialUploaded = (_mat: StudyMaterial) => {
     setMaterialsRefreshTrigger((prev) => prev + 1);
-    const newNotif: NotificationItem = {
-      id: `notif-${Date.now()}`,
-      title: `Material Uploaded: ${mat.title}`,
-      description: `Stored securely in your private study repository (${(mat.fileSizeBytes / (1024 * 1024)).toFixed(1)} MB).`,
-      timeAgo: 'Just now',
-      read: false,
-      type: 'system',
-    };
-    setNotifications((prev) => [newNotif, ...prev]);
+    refreshAuthoritativeData();
   };
 
-  // Handling legacy study kit upload
-  const handleKitCreated = (newKit: StudyKit) => {
-    setStudyKits((prev) => [newKit, ...prev]);
-    // Also generate dummy flashcards & questions for this new kit
-    const newCard: Flashcard = {
-      id: `fc-${Date.now()}`,
-      kitId: newKit.id,
-      subject: newKit.subject,
-      topic: newKit.title,
-      question: `What is the core principle governing ${newKit.title}?`,
-      answer: `The primary theoretical foundation relies on conservation of flux and differential wave propagation through medium boundaries.`,
-      keyConcept: `${newKit.title} Fundamentals`,
-      formula: '∇ × E = -∂B/∂t',
-      difficulty: 'medium',
-      masteryLevel: 'learning',
-    };
-    setFlashcards((prev) => [newCard, ...prev]);
-
-    // Add notification
-    const newNotif: NotificationItem = {
-      id: `notif-${Date.now()}`,
-      title: `Kit Created: ${newKit.title}`,
-      description: `Synthesized ${newKit.flashcardsCount} flashcards and ${newKit.quizzesCount} quiz questions.`,
-      timeAgo: 'Just now',
-      read: false,
-      type: 'achievement',
-    };
-    setNotifications((prev) => [newNotif, ...prev]);
+  // Handling quiz completion
+  const handleQuizCompleted = () => {
+    refreshAuthoritativeData();
   };
 
-  // Generate Remedial Kit
-  const handleGenerateRemedialKit = () => {
-    const remedialKit: StudyKit = {
-      id: `kit-remedial-${Date.now()}`,
-      title: 'Remedial Mastery: Magnetism & Matter',
-      subject: 'Physics',
-      unit: 'Targeted Drill',
-      keyConceptsLearned: 3,
-      totalKeyConcepts: 12,
-      progressPercent: 25,
-      lastStudied: 'Just now',
-      description: 'AI curated focused remedial kit tackling 4 missed questions in magnetic permeability and Curie-Weiss temperature laws.',
-      flashcardsCount: 15,
-      quizzesCount: 8,
-      audioDurationMin: 7,
-      activeModule: 'Curie Law & Susceptibility',
-      tags: ['Remediation', 'Error Correction', 'Physics'],
-      accuracy: 65,
-    };
-    setStudyKits((prev) => [remedialKit, ...prev]);
-    setActiveTab('study-kits');
+  // Mark all notifications read
+  const handleMarkAllNotificationsRead = async () => {
+    try {
+      await notificationApi.markAllAsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true, isRead: true })));
+    } catch (err) {
+      console.error('Failed to mark all notifications read:', err);
+    }
   };
 
-  const handleMarkAllNotificationsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  // Mark single notification read
+  const handleMarkOneNotificationRead = async (id: string) => {
+    try {
+      await notificationApi.markAsRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, read: true, isRead: true } : n))
+      );
+    } catch (err) {
+      console.error('Failed to mark notification read:', err);
+    }
   };
 
   return (
@@ -139,6 +121,8 @@ function AuthenticatedApp() {
         }}
         mobileOpen={mobileMenuOpen}
         onCloseMobile={() => setMobileMenuOpen(false)}
+        flashcardsCount={flashcardsCount}
+        weakTopicsCount={weakTopicsCount}
       />
 
       {/* Main Content Pane */}
@@ -150,6 +134,7 @@ function AuthenticatedApp() {
           onSearchChange={setSearchQuery}
           notifications={notifications}
           onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
+          onMarkOneNotificationRead={handleMarkOneNotificationRead}
           onOpenUpload={() => setIsUploadOpen(true)}
           onOpenOnboarding={() => setIsOnboardingOpen(true)}
         />
@@ -164,36 +149,23 @@ function AuthenticatedApp() {
               }}
               onOpenUpload={() => setIsUploadOpen(true)}
               onOpenSummary={() => setIsSummaryOpen(true)}
-              onStartRemedialKit={handleGenerateRemedialKit}
-              onPlayAudioTrack={() => {}}
-              studyKits={studyKits}
-              weakTopics={weakTopics}
-              onSelectWeakTopic={(_topic) => {
-                setActiveTab('weak-topics');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
             />
           )}
 
           {activeTab === 'study-kits' && (
             <StudyKitsView
-              studyKits={studyKits}
-              onSelectKit={(_kit) => setActiveTab('flashcards')}
               onNavigate={(tab) => {
                 setActiveTab(tab);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
               onOpenUpload={() => setIsUploadOpen(true)}
               onOpenSummary={() => setIsSummaryOpen(true)}
-              onPlayAudioTrack={() => {}}
               materialsRefreshTrigger={materialsRefreshTrigger}
             />
           )}
 
           {activeTab === 'flashcards' && (
             <FlashcardsView
-              flashcards={flashcards}
-              studyKits={studyKits}
               onNavigate={(tab) => {
                 setActiveTab(tab);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -203,19 +175,22 @@ function AuthenticatedApp() {
 
           {activeTab === 'quizzes' && (
             <QuizzesView
-              quizQuestions={quizQuestions}
-              studyKits={studyKits}
+              onNavigate={(tab) => {
+                setActiveTab(tab);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              onRecordQuizCompletion={handleQuizCompleted}
+            />
+          )}
+
+          {activeTab === 'my-progress' && (
+            <ProgressView
               onNavigate={(tab) => {
                 setActiveTab(tab);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
             />
           )}
-
-          {activeTab === 'my-progress' && <ProgressView onNavigate={(tab) => {
-            setActiveTab(tab);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }} />}
 
           {activeTab === 'adaptive-model' && (
             <AdaptiveModelView
@@ -228,12 +203,11 @@ function AuthenticatedApp() {
 
           {activeTab === 'weak-topics' && (
             <WeakTopicsView
-              weakTopics={weakTopics}
               onNavigate={(tab) => {
                 setActiveTab(tab);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              onGenerateRemedialKit={handleGenerateRemedialKit}
+              onGenerateRemedialKit={() => {}}
             />
           )}
 
@@ -311,4 +285,3 @@ export default function App() {
     </AuthProvider>
   );
 }
-

@@ -8,21 +8,17 @@ interface HomeViewProps {
   onNavigate: (tab: ActiveNavTab) => void;
   onOpenUpload: () => void;
   onOpenSummary: () => void;
-  onStartRemedialKit: () => void;
-  onPlayAudioTrack: () => void;
-  studyKits: StudyKit[];
-  weakTopics: WeakTopic[];
-  onSelectWeakTopic: (topic: WeakTopic) => void;
+  onStartRemedialKit?: () => void;
+  onPlayAudioTrack?: () => void;
+  studyKits?: StudyKit[];
+  weakTopics?: WeakTopic[];
+  onSelectWeakTopic?: (topic: WeakTopic) => void;
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({
   onNavigate,
   onOpenUpload,
   onOpenSummary,
-  onStartRemedialKit,
-  onPlayAudioTrack,
-  studyKits,
-  onSelectWeakTopic,
 }) => {
   const { user } = useAuth();
   const studentName = user?.profile?.full_name || 'Student';
@@ -566,29 +562,29 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
           </div>
 
-          {/* Card 4: Audio Summary */}
+          {/* Card 4: Adaptive Student Model */}
           <div
-            onClick={onPlayAudioTrack}
+            onClick={() => onNavigate('adaptive-model')}
             className="group bg-white p-5 rounded-2xl shadow-xs border border-[#c5c6ce]/30 hover:shadow-md hover:border-[#0051d5]/40 transition-all flex flex-col justify-between cursor-pointer"
           >
             <div className="flex items-start justify-between">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                <span className="material-symbols-outlined text-[22px]">headphones</span>
+              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <span className="material-symbols-outlined text-[22px]">psychology</span>
               </div>
-              <span className="text-[11px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full font-bold">
-                Audio Guide
+              <span className="text-[11px] text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full font-bold">
+                BKT Engine
               </span>
             </div>
             <div className="mt-4">
               <h4 className="text-[16px] font-bold text-[#0b1c30] group-hover:text-[#0051d5] transition-colors">
-                Audio Summary
+                Adaptive Model
               </h4>
               <p className="text-[12px] text-[#44474d] mt-1 leading-snug">
-                Conversational study podcasts explaining complex theories on commute.
+                Probabilistic knowledge tracing tracking real-time retention and cognitive decay.
               </p>
             </div>
             <div className="flex items-center gap-1 mt-4 text-[#0051d5] text-[12px] font-bold">
-              <span>Listen Now</span>
+              <span>Inspect Model</span>
               <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
                 arrow_forward
               </span>
